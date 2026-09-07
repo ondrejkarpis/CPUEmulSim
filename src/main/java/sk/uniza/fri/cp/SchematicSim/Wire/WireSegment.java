@@ -32,7 +32,7 @@ public class WireSegment extends Group {
         this.endJoint.connectWireSegment(this);
 
         this.line.setStrokeWidth(6);
-        this.line.setFill(wire.getColor());
+        this.line.setFill(null);
         this.line.setStroke(wire.getColor());
         this.line.setOpacity(1);
         this.getChildren().add(line);
@@ -62,7 +62,6 @@ public class WireSegment extends Group {
     }
 
     public void setColor(Paint color) {
-        this.line.setFill(color);
         this.line.setStroke(color);
     }
 
