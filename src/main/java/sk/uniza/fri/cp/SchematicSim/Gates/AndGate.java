@@ -11,6 +11,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.List;
+import java.util.Arrays;
 
 /**
  * Abstraktné 2-vstupové AND hradlo. Nahrádza reálny 74xx čip (napr. Gen7408) z BreadboardSim -
@@ -37,7 +38,7 @@ public class AndGate extends GateSymbol {
         a = new InputPin(this, "A", 0, 0, Side.LEFT);
         b = new InputPin(this, "B", 0, 2, Side.LEFT);
         y = new OutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
-        return List.of(a, b, y);
+        return Arrays.asList(a, b, y);
     }
 
     @Override

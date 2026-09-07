@@ -11,6 +11,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.List;
+import java.util.Arrays;
 
 /**
  * Abstraktný invertor (NOT). Vykreslený ako klasický trojuholník s negačným krúžkom.
@@ -33,7 +34,7 @@ public class NotGate extends GateSymbol {
     protected List<Pin> createPins() {
         a = new InputPin(this, "A", 0, 1, Side.LEFT);
         y = new OutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
-        return List.of(a, y);
+        return Arrays.asList(a, y);
     }
 
     @Override

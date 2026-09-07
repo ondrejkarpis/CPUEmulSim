@@ -47,7 +47,7 @@ public class SchematicSheet extends ScrollPane {
     private final SchematicSimulator simulator;
     private final GridSystem gridSystem;
     private final SheetLayersManager layersManager;
-    private final GridOccupancy occupancy;
+    private GridOccupancy occupancy;
     private DescriptionPane descriptionPane;
 
     private final ArrayList<Selectable> selected;

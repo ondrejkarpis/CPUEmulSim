@@ -39,7 +39,7 @@ public abstract class Pin extends Group implements Connectable {
 
     private static final Color CORE_COLOR = Color.rgb(60, 60, 60);
 
-    private final GateSymbol owner;
+    private GateSymbol owner;
     private final String name;
     private final Direction direction;
     private final int gridOffsetX, gridOffsetY;

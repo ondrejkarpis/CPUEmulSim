@@ -47,11 +47,11 @@ public class GridSystem {
         return new Point2D(gridX * sizeX, gridY * sizeY);
     }
 
-    Point2D pixelToGrid(double x, double y) {
+    public Point2D pixelToGrid(double x, double y) {
         return new Point2D(x / sizeX, y / sizeY);
     }
 
-    Pane generateBackground(double width, double height, Paint bgColor, Paint linesColor) {
+    public Pane generateBackground(double width, double height, Paint bgColor, Paint linesColor) {
         Pane bck = new Pane(new Rectangle(width, height, bgColor));
 
         for (int x = 0; x <= width; x += sizeX) {

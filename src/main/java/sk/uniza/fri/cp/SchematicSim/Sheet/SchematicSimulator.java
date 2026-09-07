@@ -30,10 +30,10 @@ public class SchematicSimulator {
     private List<GateSymbol> allGates;
     private final BooleanProperty running;
 
-    private final Service<Void> simulatorService = new Service<>() {
+    private final Service<Void> simulatorService = new Service<Void>() {
         @Override
         protected Task<Void> createTask() {
-            return new Task<>() {
+            return new Task<Void>() {
                 @Override
                 protected Void call() throws Exception {
                     Thread.currentThread().setName("SchematicSimulationThread");

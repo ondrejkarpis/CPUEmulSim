@@ -19,7 +19,7 @@ public abstract class Movable extends HighlightGroup {
 
     private int gridPosX;
     private int gridPosY;
-    private final SchematicSheet sheet;
+    private SchematicSheet sheet;
 
     private double nodeOffsetX = -1;
     private double nodeOffsetY = -1;

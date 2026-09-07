@@ -11,6 +11,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.List;
+import java.util.Arrays;
 
 /**
  * Abstraktné 2-vstupové OR hradlo.
@@ -34,7 +35,7 @@ public class OrGate extends GateSymbol {
         a = new InputPin(this, "A", 0, 0, Side.LEFT);
         b = new InputPin(this, "B", 0, 2, Side.LEFT);
         y = new OutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
-        return List.of(a, b, y);
+        return Arrays.asList(a, b, y);
     }
 
     @Override
