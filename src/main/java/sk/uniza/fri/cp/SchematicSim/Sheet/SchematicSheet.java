@@ -248,7 +248,9 @@ public class SchematicSheet extends ScrollPane {
     }
 
     public void deleteSelect() {
-        new ArrayList<>(selected).forEach(Selectable::delete);
+        ArrayList<Selectable> toDelete = new ArrayList<>(selected);
+        clearSelect();
+        toDelete.forEach(Selectable::delete);
     }
 
     public boolean addItem(Object item) {

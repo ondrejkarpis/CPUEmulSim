@@ -167,7 +167,14 @@ public class App extends Application {
         Stage schematicStage = new Stage();
         schematicStage.setTitle("Simulátor - Schéma");
         schematicStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/simulator_icon_128.png")));
-        schematicStage.setScene(new Scene(schematicRoot, 1280, 850));
+        Scene schematicScene = new Scene(schematicRoot, 1280, 850);
+        schematicScene.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
+            if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
+                schematicSheet.deleteSelect();
+                event.consume();
+            }
+        });
+        schematicStage.setScene(schematicScene);
         ((CPUController) CpuLayoutLoader.getController()).setSchematicStage(schematicStage);
     }
 }
