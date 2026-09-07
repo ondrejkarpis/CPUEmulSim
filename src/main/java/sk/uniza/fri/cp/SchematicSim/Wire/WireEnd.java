@@ -145,4 +145,13 @@ public class WireEnd extends Joint {
             getSheet().addEvent(new SheetEvent(pinToUpdate));
         }
     }
+
+    void releasePin() {
+        if (this.pin == null) return;
+
+        Pin connectedPin = this.pin;
+        connectedPin.getOwner().localToParentTransformProperty().removeListener(pinPositionChangeListener);
+        this.pin = null;
+        if (connectedPin.getWireEnd() == this) connectedPin.clearWireEnd();
+    }
 }
