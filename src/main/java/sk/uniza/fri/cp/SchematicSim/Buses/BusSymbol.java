@@ -14,24 +14,22 @@ import java.util.List;
 
 public abstract class BusSymbol extends GateSymbol {
 
-    private final String label;
-    private final String[] pinNames;
-
-    protected BusSymbol(String label, String[] pinNames) {
+    protected BusSymbol() {
         super();
-        this.label = label;
-        this.pinNames = pinNames;
     }
 
-    protected BusSymbol(SchematicSheet sheet, String label, String[] pinNames) {
+    protected BusSymbol(SchematicSheet sheet) {
         super(sheet);
-        this.label = label;
-        this.pinNames = pinNames;
     }
+
+    protected abstract String getBusLabel();
+
+    protected abstract String[] getBusPinNames();
 
     @Override
     protected List<Pin> createPins() {
         List<Pin> pins = new ArrayList<>();
+        String[] pinNames = getBusPinNames();
         for (int index = 0; index < pinNames.length; index++) {
             pins.add(new BusPin(this, pinNames[index], 0, index, Side.LEFT));
         }
@@ -45,7 +43,7 @@ public abstract class BusSymbol extends GateSymbol {
         body.setStroke(Color.DARKGOLDENROD);
         body.setStrokeWidth(1.5);
 
-        Text title = new Text(label);
+        Text title = new Text(getBusLabel());
         title.setLayoutX(cell * 1.2);
         title.setLayoutY(cell * 0.8);
 
@@ -67,17 +65,17 @@ public abstract class BusSymbol extends GateSymbol {
 
     @Override
     public int getGridHeight() {
-        return pinNames.length;
+        return getBusPinNames().length;
     }
 
     @Override
     public String getName() {
-        return label;
+        return getBusLabel();
     }
 
     @Override
     public String getShortDescription() {
-        return label + " zbernica (" + pinNames.length + " bitov)";
+        return getBusLabel() + " zbernica (" + getBusPinNames().length + " bitov)";
     }
 
     private static class BusPin extends Pin {

@@ -4,7 +4,9 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
 public class DataBus8 extends BusSymbol {
 
-    private static String[] pinNames() {
+    private static final String[] PIN_NAMES = createPinNames();
+
+    private static String[] createPinNames() {
         String[] names = new String[8];
         for (int index = 0; index < names.length; index++) {
             names[index] = "D" + index;
@@ -13,10 +15,20 @@ public class DataBus8 extends BusSymbol {
     }
 
     public DataBus8() {
-        super("DÁTOVÁ 8", pinNames());
+        super();
     }
 
     public DataBus8(SchematicSheet sheet) {
-        super(sheet, "DÁTOVÁ 8", pinNames());
+        super(sheet);
+    }
+
+    @Override
+    protected String getBusLabel() {
+        return "DÁTOVÁ 8";
+    }
+
+    @Override
+    protected String[] getBusPinNames() {
+        return PIN_NAMES;
     }
 }

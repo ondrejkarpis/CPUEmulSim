@@ -7,10 +7,20 @@ public class ControlBus extends BusSymbol {
     private static final String[] PIN_NAMES = {"MEMR", "MEMW", "IOR", "IOW"};
 
     public ControlBus() {
-        super("RIADIACA", PIN_NAMES);
+        super();
     }
 
     public ControlBus(SchematicSheet sheet) {
-        super(sheet, "RIADIACA", PIN_NAMES);
+        super(sheet);
+    }
+
+    @Override
+    protected String getBusLabel() {
+        return "RIADIACA";
+    }
+
+    @Override
+    protected String[] getBusPinNames() {
+        return PIN_NAMES;
     }
 }
