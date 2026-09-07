@@ -77,6 +77,12 @@ public class WireEnd extends Joint {
      */
     public void connect(Pin target) {
         if (this.pin == null) {
+            WireEnd existingEnd = target != null ? target.getWireEnd() : null;
+            if (existingEnd != null && existingEnd.getWire() != this.getWire()
+                    && !target.getOwner().getSheet().getSimulatorWires().contains(existingEnd.getWire())) {
+                existingEnd.releasePin();
+            }
+
             if (target != null && !target.isOccupied()) {
                 this.pin = target;
                 this.pin.setWireEnd(this);

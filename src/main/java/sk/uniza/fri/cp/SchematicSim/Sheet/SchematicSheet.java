@@ -22,6 +22,7 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
+import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -297,6 +298,10 @@ public class SchematicSheet extends ScrollPane {
 
     public void addEvent(SheetEvent event) {
         simulator.addEvent(event);
+    }
+
+    public java.util.List<Wire> getSimulatorWires() {
+        return layersManager.getWires();
     }
 
     public Point2D getMousePositionOnGrid(MouseEvent event) {
