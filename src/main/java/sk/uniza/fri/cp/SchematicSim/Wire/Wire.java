@@ -303,9 +303,9 @@ public class Wire extends HighlightGroup {
     @Override
     public void delete() {
         super.delete();
+        this.getSheet().removeItem(this);
         this.ends[0].disconnect();
         this.ends[1].disconnect();
-        this.getSheet().removeItem(this);
     }
 
     @Override
