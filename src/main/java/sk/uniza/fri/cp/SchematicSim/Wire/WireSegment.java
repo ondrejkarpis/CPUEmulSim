@@ -70,28 +70,30 @@ public class WireSegment extends Group {
         List<Double> points = line.getPoints();
         if (points.size() < 4) return;
 
-        double totalLength = 0;
-        for (int index = 2; index < points.size(); index += 2) {
-            totalLength += Math.abs(points.get(index) - points.get(index - 2))
-                    + Math.abs(points.get(index + 1) - points.get(index - 1));
-        }
-
-        double halfway = totalLength / 2;
-        double travelled = 0;
+        double longestLength = -1;
+        double labelX = points.get(0);
+        double labelY = points.get(1);
+        boolean horizontal = true;
         for (int index = 2; index < points.size(); index += 2) {
             double x1 = points.get(index - 2);
             double y1 = points.get(index - 1);
             double x2 = points.get(index);
             double y2 = points.get(index + 1);
             double length = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-            if (travelled + length >= halfway) {
-                double ratio = length == 0 ? 0 : (halfway - travelled) / length;
-                double labelX = x1 + (x2 - x1) * ratio;
-                double labelY = y1 + (y2 - y1) * ratio - 4;
-                stateLabel.relocate(labelX - stateLabel.getLayoutBounds().getWidth() / 2, labelY - 10);
-                return;
+            if (length > longestLength) {
+                longestLength = length;
+                labelX = (x1 + x2) / 2;
+                labelY = (y1 + y2) / 2;
+                horizontal = Math.abs(x2 - x1) >= Math.abs(y2 - y1);
             }
-            travelled += length;
+        }
+
+        double labelWidth = stateLabel.getLayoutBounds().getWidth();
+        double labelHeight = stateLabel.getLayoutBounds().getHeight();
+        if (horizontal) {
+            stateLabel.relocate(labelX - labelWidth / 2, labelY - labelHeight - 4);
+        } else {
+            stateLabel.relocate(labelX + 6, labelY - labelHeight / 2);
         }
     }
 
