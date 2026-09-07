@@ -1,0 +1,399 @@
+Welcome, Ondrej! I’m Claude.
+
+Bring me anything—a tough problem, a half-formed idea, something you need to write. We’ll figure it out together.
+
+Where do you want to start?
+
+Môem komunikova po slovensky?
+
+Áno, samozrejme! Môeme komunikova po slovensky. Pokojne sa pıtajte, s èím vám môem pomôc.
+
+Mám program, ktorı simuluje jednoduchı CPU a umoòuje vytvori zapojenie zo základnıch logickıch obvodov na prepojovacom paneli. Simulátor imituje prepájanie skutoènıch IO pomocou vodièov. Chcem zapojenia vytvára kreslením schémy, teda prida editor schémy a odstráni breadboard.
+Thought for 6s
+
+Rozumiem – chcete nahradi breadboard-style zapájanie klasickım grafickım editorom schém (uzly = logické obvody, hrany = vodièe/spoje). Ne navrhnem konkrétnu architektúru, potrebujem vedie, v akom prostredí program beí, lebo to zásadne ovplyvòuje odporúèanı prístup (canvas kninica, event systém, ako rieši routing vodièov a pod.).
+
+Je to v Jave, tu sú zdrojáky:
+Ran a command
+
+Vidím súbor src.zip. Rozbalím ho a pozriem sa na štruktúru projektu.
+Viewed 7 files, ran 3 commands
+
+Pozrel som sa do zdrojákov (JavaFX aplikácia, sk.uniza.fri.cp.BreadboardSim.*). Mám teraz jasnı obraz architektúry a viem poveda presne, èo sa dá znovupoui a èo treba prerobi.
+Ako je to postavené teraz
+
+Simulaèné jadro (nezávislé od breadboardu — dá sa zachova 1:1):
+
+    Device (abstraktná) › Chip (reálne IO ako Gen7408, SN74138...) — má simulate(), reset(), zoznam Pin
+    Pin (InputPin/OutputPin/InputOutputPin) — pripája sa k Socket
+    Socket — má Potential, ktorı tvorí strom prepojení (viacero socketov zdie¾a jeden Potential, keï sú spojené vodièom)
+    BoardSimulator — event-driven simulácia (front zmien potenciálov, volanie simulate() na dotknutıch zariadeniach)
+
+Vizuálna/interakèná vrstva (pevne zviazaná s breadboardom — toto treba prerobi):
+
+    Component (napr. SchoolBreadboard) vlastní pole Socket-ov na mrieke; Device sa pripája kolíznou detekciou — keï naò potiahnete pin nad soket (Board.checkForCollisionWithSocket), fyzicky sa musí prekrıva s reálnymi dierkami na doske
+    Wire sa ahá zo Socket na Socket, so Joint-mi na lomenie èiary, ale stále medzi dvomi bodmi na sockete komponentu — nie medzi vo¾ne umiestnenımi pinmi zariadení
+    Èipy (Gen7408 a pod.) modelujú reálne 74xx puzdrá — majú aj VCC/GND piny a musia by "napájané", presne ako na skutoènej doske. To je pedagogickı zámer (iaci sa uèia reálne IO), nie len technickı detail.
+
+Èo to znamená pre váš zámer
+
+Nahradenie breadboardu schematickım editorom nie je len "inı spôsob kreslenia" — mení sa aj model pripájania:
+
+    v schéme sa vodiè ahá priamo z pinu súèiastky na pin inej súèiastky (iadny medzikrok cez socket na doske),
+    odpadá kolízna detekcia „pin nad dierkou", namiesto nej potrebujete len snap-to-grid a kontrolu, èi pin/vodiè u nie je obsadenı,
+    vzniká zásadná otázka: zostávajú súèiastky reálne 74xx puzdrá (s VCC/GND, viacnásobnımi hradlami v jednom èipe), alebo prechádzate na abstraktné logické symboly (samostatnı AND/OR/NOT/NAND s klasickou schematickou znaèkou, bez napájania)? Toto vırazne mení rozsah práce aj to, èo z Chip/Gen74xx tried zostane.
+
+Návrh architektúry
+
+Odporúèam:
+
+    Ponecha Device/Pin/Socket/Potential/BoardSimulator — jadro simulácie sa nemení.
+    Zjednoduši Socket — nebude viazanı na Component (breadboard), ale bude priamo súèasou Device na jeho pine (Pin a Socket splynú do jedného konceptu "connection point"), umiestnenej v absolútnych mriekovıch súradniciach schémy.
+    Nahradi Component/SchoolBreadboard/kolíznu detekciu — SchematicSheet (nová trieda namiesto Board-viazaného breadboardu) bude len plocha s mriekou, na ktorú sa Device-y vo¾ne umiestòujú (drag & drop z paletky, ako teraz ItemPicker, ale bez nutnosti "sadnú" na dosku).
+    Prerobi Wire — namiesto vo¾nıch uhlov medzi Joint-mi zvái ortogonálne (Manhattan) vedenie, bené v schematickıch editoroch — je to èisto vizuálna zmena, Joint/WireSegment logiku môete z ve¾kej èasti zachova.
+    SchemeLoader (ukladanie/naèítanie) prerobi na novı formát bez breadboard-pozícií.
+
+Kım zaènem meni kód
+
+Keïe ide o zásah do jadra aplikácie (desiatky súborov), potrebujem od vás rozhodnutie v dvoch bodoch, aby som nešiel zlım smerom:
+Majú súèiastky v schéme zosta reálne 74xx puzdrá (s VCC/GND, viac hradiel v jednom èipe, ako teraz), alebo prejs na abstraktné logické symboly (samostatné AND/OR/NOT bez napájania)?
+Prejs na abstraktné logické symboly
+Akım štılom sa majú vodièe v schéme kresli?
+Ortogonálne (Manhattan štıl, ako v Eagle/KiCad)
+Kde chcete zaèa?
+Najprv návrh dátového modelu (Device/Pin bez Componentu)
+Viewed 2 files
+
+Dobre. Tu je návrh nového dátového modelu — vychádza z toho, èo je v projekte znovupouite¾né (Item/Movable, Potential, BoardSimulator, Wire/Joint/WireSegment mechanika lomenia), ale zbavuje sa Socket+Component vrstvy naviazanej na breadboard.
+K¾úèová zmena koncepcie
+
+Teraz: Pin (na zariadení) sa pripája k Socket (na doske), Socket nesie Potential, Wire spája Socket-Socket.
+
+Nové: Pin sám nesie Potential a je priamo koncovım bodom vodièa. Socket ako medzièlánok mizne úplne. Namiesto rozhrania "kolízia s dierkou" bude Pin ma pevnú pozíciu v mrieke relatívne k svojej súèiastke.
+Návrh tried
+java
+
+/**
+ * Èoko¾vek, èo môe nies elektrickı potenciál a by koncom vodièa.
+ * Implementujú Pin (na súèiastke) aj Joint (lom/odboèka na vodièi).
+ */
+public interface Connectable {
+    Potential getPotential();
+    void setPotential(Potential potential);
+    Point2D getSceneGridPosition();     // pre routing a snapping
+    boolean isOccupied();               // max. jeden Wire priamo pripojenı (odboèky riešia Joint-y)
+}
+
+java
+
+/**
+ * Pin logickej súèiastky. Nahrádza pôvodné Pin+Socket.
+ * Pozícia je vdy odvodená od GateSymbol.getGridPos() + offset, netreba kolíznu detekciu.
+ */
+public abstract class Pin extends Group implements Connectable {
+
+    public enum Direction { INPUT, OUTPUT, INOUT }
+    public enum PinState { HIGH, LOW, HIGH_IMPEDANCE, NOT_CONNECTED }
+
+    private final GateSymbol owner;
+    private final String name;
+    private final Direction direction;
+    private final int gridOffsetX, gridOffsetY;  // pozícia voèi ¾avému hornému rohu súèiastky
+    private final Side side;                     // LEFT/RIGHT/TOP/BOTTOM – smer "vıvodu" pre ortogonálny routing
+
+    private Potential potential;
+    private PinState state = PinState.NOT_CONNECTED;
+    private WireEnd connectedWireEnd;
+
+    // getters/setters, isConnected(), disconnect() ...
+
+    @Override
+    public boolean isOccupied() { return connectedWireEnd != null; }
+
+    @Override
+    public Point2D getSceneGridPosition() {
+        return owner.getGridPos().add(gridOffsetX, gridOffsetY);
+    }
+}
+
+java
+
+/**
+ * Nahrádza Device. Súèiastka priamo na schéme, bez väzby na Component/breadboard.
+ * Umiestòovanie = len snap-to-grid + kontrola, e obsadzované bunky sú vo¾né (SchematicSheet.isAreaFree).
+ */
+public abstract class GateSymbol extends Item {
+
+    private int gridPosX, gridPosY;
+    private final List<Pin> pins;
+
+    protected GateSymbol(SchematicSheet sheet) {
+        super(sheet);
+        this.pins = createPins();     // nahrádza fillPins() z pôvodného Chip
+    }
+
+    protected abstract List<Pin> createPins();
+    public abstract void simulate();
+    public abstract void reset();
+    public abstract int getGridWidth();
+    public abstract int getGridHeight();
+
+    public List<Pin> getPins() { return pins; }
+    public Point2D getGridPos() { return new Point2D(gridPosX, gridPosY); }
+
+    @Override
+    public void moveTo(int x, int y) {
+        super.moveTo(x, y);
+        this.gridPosX = x; this.gridPosY = y;
+        pins.forEach(Pin::updateScenePosition);   // prepoèíta polohu pinu -> presunie pripojené konce vodièov
+    }
+}
+
+java
+
+/** Príklad prevodu Gen7408 (4x AND v 74xx puzdre) na abstraktné hradlo. */
+public class AndGate extends GateSymbol {
+    private Pin a, b, y;
+
+    protected List<Pin> createPins() {
+        a = new InputPin(this, "A", 0, 0, Side.LEFT);
+        b = new InputPin(this, "B", 0, 1, Side.LEFT);
+        y = new OutputPin(this, "Y", 2, 0, Side.RIGHT);
+        return List.of(a, b, y);
+    }
+
+    public void simulate() {
+        setPin(y, (isHigh(a) && isHigh(b)) ? PinState.HIGH : PinState.LOW);
+    }
+
+    public void reset() { setPin(y, PinState.NOT_CONNECTED); }
+}
+
+Potential ostáva koncepène rovnakı (strom prepojenıch Connectable namiesto Socket), len zmeníte typ parametrov v konštruktore/metódach zo Socket na Connectable — getConnectedSockets() › getConnectedNodes().
+
+Wire/Joint/WireEnd — zmeníte len typ, ku ktorému sa pripájajú (Socket › Connectable), samotná logika splitSegment/removeJoint/moveJointsWithEnd ostáva. Kreslenie segmentov prerobíte na ortogonálny router (napr. jednoduchı L/Z-shape medzi dvoma bodmi pod¾a Side pinu, nie priamu èiaru).
+
+Èo úplne zaniká: Socket, Component, SchoolBreadboard, GridSystem-collision èasti, Board.checkForCollisionWithComponent/Socket, searchForSockets/tryToConnectToFoundSockets v Device. Umiestòovanie sa zjednoduší na kontrolu vo¾nıch buniek mrieky (iadna kolízia s tvarom komponentu).
+
+Chcete, aby som pokraèoval Potential-om a Wire/Joint prerobením (elektrická vrstva), alebo radšej SchematicSheet + umiestòovanie/drag&drop (interakèná vrstva)?
+
+elektrická vestva
+Viewed 3 files
+
+Dobre, ideme na elektrickú vrstvu. Tá sa dá prerobi najmenej invazívne zo všetkého — logika stromu potenciálov je nezávislá od breadboardu, mení sa len to, k èomu je pripojená (Socket › Connectable).
+1. Connectable — spoloènı predok Pin-u aj Joint-u
+java
+
+public interface Connectable {
+    Potential getPotential();
+    void setPotential(Potential potential);
+    Point2D getSceneGridPosition();
+    void highlight(int highlightType);     // WARNING, COMMON_POTENTIAL, OK, INFO – ako doteraz na Sockete
+    void unhighlight(int highlightType);
+    Item getOwnerItem();                   // GateSymbol pre Pin, Wire pre Joint – kvôli getDescription()/select()
+}
+
+Pin implementuje Connectable priamo (preberá presne to, èo dnes robí Socket: vlastnı Potential, highlight()/unhighlight() farbenie). Joint/WireEnd implementuje Connectable tie — highlight(WARNING) sa namapuje na existujúce setColor(RED), ostatné typy zvıraznenia joint ani teraz nepouíval, take no-op.
+2. Potential — len zmena typu, logika sa nehıbe
+
+Celá binárna stromová štruktúra (parent1/parent2/child, setValue(), detekcia skratu, PinType — premenované z SocketType) ostáva bezo zmeny v algoritme. Mechanicky prejde:
+java
+
+public class Potential {
+    private Connectable node1;      // bolo Socket socket1
+    private Connectable node2;      // bolo Socket socket2
+    private Potential parent1, parent2, child;
+    private Value value;
+    private PinType type;           // bolo SocketType
+
+    public Potential(Connectable node1, Connectable node2) { ... }   // logika update() nezmenená
+
+    void getConnectedNodes(List<Connectable> out) { ... }            // bolo getConnectedSockets
+    private void getOutputNodes(List<Connectable> out) { ... }       // bolo getOutputSockets
+    ...
+}
+
+Jediné miesto, kde sa mení správanie, nie len typ: highlightShortCircuitSockets() dnes volá socket.highlight(Socket.WARNING) priamo — po zmene volá node.highlight(Connectable.WARNING) cez rozhranie, funguje to na Pin aj Joint rovnako.
+
+Špecifickı prípad na rozhodnutie: Wire.updatePotential() má hack — ak end.getComponent() instanceof BusInterface, updatuje sa opaèné poradie kvôli zbernici. Keïe maete reálne èipy a BusInterface pravdepodobne padá s nimi, tento instanceof odstránim. Ak by ste v budúcnosti chceli zbernicu/multiplexor ako abstraktnı prvok, dá sa nahradi metódou boolean hasUpdatePriority() na GateSymbol, nezávislou od breadboardovıch tried.
+3. WireEnd — pripojenie na Connectable namiesto Socket
+java
+
+public class WireEnd extends Joint {
+    private Connectable connectable;     // bolo Socket socket
+
+    public void connect(Connectable target) {
+        if (this.connectable == null) {
+            if (target != null && !target.isOccupied()) {
+                this.connectable = target;
+                target.setWireEnd(this);
+                setLayoutX(target.getSceneGridPosition().getX());
+                setLayoutY(target.getSceneGridPosition().getY());
+                this.getWire().updatePotential();
+            } else {
+                setColor(Color.RED);
+            }
+        } else {
+            disconnect();
+            connect(target);
+        }
+    }
+    ...
+}
+
+Sledovanie pohybu (socketPositionChangeListener na localToParentTransformProperty) ostáva identické — Pin je stále Group/Node v scéne, take transform listener funguje rovnako, len poèúva na pin.localToParentTransformProperty() namiesto socket....
+4. Ortogonálne (Manhattan) vedenie — mení sa len WireSegment (vykres¾ovanie)
+
+Dátovı model (Joint reaz + WireSegment medzi dvoma susednımi Joint-mi, splitSegment/removeJoint na lámanie) ostáva presne takı, ako je teraz — mení sa len to, èím sa segment kreslí:
+
+    Namiesto jednej Line medzi (startX,startY) a (endX,endY) bude WireSegment kresli lomenú èiaru (Polyline) s 1 medzi¾ahlım bodom (L-tvar) alebo 2 (Z-tvar), pod¾a toho, na ktorú stranu (Side z pinu — LEFT/RIGHT/TOP/BOTTOM) vychádza vıvod.
+    Algoritmus: ak sú body zarovnané v X alebo Y › priama èiara. Inak › jeden zalomenı bod uprostred (na osi kolmej k vıstupnému smeru prvého pinu), prípadne s min. dåkou "pahı¾a" (stub) tesne pri pine, aby vodiè nevychádzal šikmo z komponentu.
+    Toto je èisto geometrická funkcia computeOrthogonalPath(Point2D from, Side fromSide, Point2D to, Side toSide) -> List<Point2D>, dá sa dopracova neskôr — teraz staèí vedie, e sa zapojí len do WireSegment.updateGraphics(), niè iné sa nedotkne.
+
+Toto je èistı rez: jadro simulácie (Potential/BoardSimulator) a topológia vodièov (Joint/WireEnd/splitSegment) sa nemenia vôbec, mení sa len typ pripojite¾ného bodu (Socket›Connectable) a spôsob kreslenia segmentu.
+
+Chcete pokraèova SchematicSheet-om a umiestòovaním/paletkou súèiastok (interakèná vrstva), alebo najprv dorieši WireSegment routing algoritmus do konkrétneho kódu?
+Viewed 4 files
+Interakèná vrstva
+
+Dobrá správa: mechanizmus ahania z paletky (JavaFX MOUSE_DRAG_* gestá v Board), zoom/pan a snap-to-grid v Movable sú nezávislé od breadboardu — dajú sa prevzia takmer bez zmeny. Mení sa hlavne to, èo teraz robí Device.searchForSockets()/tryToConnectToFoundSockets() (kolízia pin-dierka) — to nahradí jednoduchá kontrola vo¾nıch buniek mrieky.
+1. SchematicSheet — nahrádza Board
+java
+
+public class SchematicSheet extends ScrollPane {
+
+    private final BoardSimulator simulator;
+    private final GridSystem gridSystem;
+    private final SheetLayersManager layersManager;   // 2 vrstvy: gates, wires (iadne components)
+    private final GridOccupancy occupancy;             // NOVÉ - nahrádza kolíznu detekciu
+
+    private GateSymbol addingItem;
+
+    public SchematicSheet(double width, double height, int gridSizePx) {
+        this.gridSystem = new GridSystem(gridSizePx);
+        this.occupancy = new GridOccupancy();
+        // pozadie, zoom, pan -> kopírované z Board takmer 1:1
+        ...
+        // POZOR: iadne SchoolBreadboard sa u na zaèiatku nevytvára
+    }
+
+    // rovnaké 4 handlery ako v Board (onMouseDragEntered/Over/Released/Exited),
+    // len typované na GateSymbol namiesto Item a s pridanou kontrolou vo¾nosti buniek
+    ...
+}
+
+2. GridOccupancy — náhrada za kolíznu detekciu
+java
+
+/** Jednoduchá evidencia obsadenıch buniek mrieky. Nahrádza Board.checkForCollisionWithComponent/Socket. */
+public class GridOccupancy {
+    private final Set<Long> occupied = new HashSet<>();   // kódovanie (x,y) -> long
+
+    public boolean isFree(int gridX, int gridY, int width, int height) {
+        for (int x = gridX; x < gridX + width; x++)
+            for (int y = gridY; y < gridY + height; y++)
+                if (occupied.contains(key(x, y))) return false;
+        return true;
+    }
+
+    public void occupy(GateSymbol g)   { forEachCell(g, occupied::add); }
+    public void free(GateSymbol g)     { forEachCell(g, occupied::remove); }
+
+    private void forEachCell(GateSymbol g, LongConsumer op) {
+        for (int x = 0; x < g.getGridWidth(); x++)
+            for (int y = 0; y < g.getGridHeight(); y++)
+                op.accept(key((int) g.getGridPos().getX() + x, (int) g.getGridPos().getY() + y));
+    }
+
+    private long key(int x, int y) { return ((long) x << 32) | (y & 0xffffffffL); }
+}
+
+Pri moveTo()/drop-e na GateSymbol sa namiesto searchForSockets()+tryToConnectToFoundSockets() volá:
+java
+
+if (occupancy.isFree(gridX, gridY, symbol.getGridWidth(), symbol.getGridHeight())) {
+    occupancy.free(symbol);          // uvo¾ni staré miesto (ak sa presúva)
+    symbol.moveTo(gridX, gridY);
+    occupancy.occupy(symbol);
+} else {
+    // zvırazni èerveno / vráti na pôvodné miesto — obdoba dnešného highlightConnectibleSockets(WARNING)
+}
+
+Toto je podstatne jednoduchšie ako pôvodnı kód — iadne localToScene(getBoundsInLocal()) prieniky, iadne rozlišovanie "je to Chip, musí by práve jeden prekrıvajúci komponent".
+3. Vznik vodièa — presúva sa z Socket na Pin
+
+Dnes onMouseDragDetected (vytvorenie Wire), onMouseDragEntered/Exited (zvıraznenie), onMouseDragReleased (pripojenie) ijú na Socket. Keïe Socket mizne, tieto handlery sa presunú priamo na Pin (ktorı, ako sme navrhli v dátovom modeli, implementuje Connectable):
+java
+
+public abstract class Pin extends Group implements Connectable {
+    // presné kopírovanie eventov zo Socket.java, zmena "this" z komponentu na GateSymbol vlastníka:
+    private EventHandler<MouseEvent> onMouseDragDetected = event -> {
+        Wire w = new Wire(this);              // Wire(Connectable) namiesto Wire(Socket)
+        owner.getSheet().addItem(w);
+        ...
+    };
+    ...
+}
+
+Vizuálne (kruh/terminál na konci vıvodu súèiastky) aj interakène (ahanie = novı vodiè) je to identické so Socket, len bez vlastného Component okolo seba.
+4. ItemPicker — zjednodušenie paletky
+
+Odpadá componentsPane (breadboardy) aj instanceof Component/SchoolBreadboard:
+java
+
+public class ItemPicker extends VBox {
+    private final FlowPane gatesPane;   // jediná paletka: AND, OR, NOT, NAND, XOR...
+
+    public void registerItem(GateSymbol item) {
+        gatesPane.getChildren().add(item);
+        item.addEventFilter(MouseEvent.DRAG_DETECTED, e -> item.startFullDrag());
+        item.addEventFilter(MouseEvent.MOUSE_CLICKED, e -> {
+            if (descriptionPane != null) descriptionPane.setDescription(item);
+        });
+    }
+}
+
+Konštruktor bez parametrov na Item (new GateSymbol() cez reflection pri Board.getClass().getConstructor(Board.class)) ostáva rovnakı mechanizmus ako teraz — funguje nezávisle od toho, èi cie¾ová trieda je Device alebo GateSymbol.
+5. Èo sa nemení vôbec
+
+    Movable — snap-to-grid ahanie, zoom-scale prepoèty súradníc
+    Selectable/HighlightGroup — vıber, rubber-band selection
+    BoardSimulator — event fronta, beh simulácie
+    Zoom/pan kód v Board/SchematicSheet
+
+Tım máte pokrytı celı pôvodnı okruh otázok z prvej správy (dátovı model, elektrická vrstva, interakèná vrstva). Zostáva ešte SchemeLoader (formát ukladania/naèítania — dnes ukladá breadboard-pozície, treba prerobi na zoznam GateSymbol + ich Pin/Wire prepojenia) a samotné grafické symboly hradiel (SVG/Shape pre AND/OR/NOT namiesto Chip.generateItemImage).
+
+Chcete pokraèova niektorım z tıchto, alebo mám radšej zaèa sklada konkrétne .java súbory do projektu pod¾a doterajšieho návrhu?
+
+Najprv urob java súbory pod¾a tvojho návrhu.
+Viewed 6 files
+
+Idem posklada konkrétne súbory pod¾a doterajšieho návrhu — novı, samostatnı balík sk.uniza.fri.cp.SchematicSim, ktorı nezasahuje do existujúceho BreadboardSim (aby ste si to mohli najprv overi ved¾a seba). Najprv pripravím adresárovú štruktúru.
+Created 11 files, ran a command, viewed a file
+
+Pri písaní Pin som si všimol nekonzistenciu oproti originálu — opravím Connectable, aby presnejšie zodpovedal tomu, ako Potential v pôvodnom kóde skutoène funguje (viae sa iba na Socket/teraz Pin, nie na Joint).
+
+Dorob zaèatú prácu.
+Created 16 files, viewed 11 files, and 10 more tools
+
+Dokonèil som celı balík sk.uniza.fri.cp.SchematicSim (29 .java súborov) presne pod¾a toho, na èom sme sa poèas rozhovoru zhodli:
+
+Dátovı model — Connectable, Pin/InputPin/OutputPin, GateSymbol
+Elektrická vrstva — PinType, Potential (binárny strom spojení prevzatı 1:1), SheetEvent/SheetChangeEvent, SchematicSimulator
+Interakèná vrstva — SchematicSheet, SheetLayersManager, GridOccupancy, ItemPicker, Movable/Item/Selectable/HighlightGroup
+Ortogonálny router — OrthogonalRouter, prepojenı do WireSegment (Polyline namiesto Line), Joint/WireEnd/Wire
+Príklady hradiel — AndGate, OrGate, NotGate
+
+Balík je zámerne oddelenı od BreadboardSim, aby ste si ho mohli vyskúša ved¾a pôvodného kódu bez rizika. V README.md v archíve nájdete:
+
+    tabu¾ku mapovania starıch tried na nové,
+    zoznam toho, èo je zjednodušené/mimo rozsahu (router nerieši prekrıvanie s telami súèiastok, grafické znaèky hradiel sú zámerne jednoduché, SchemeLoader na ukladanie/naèítanie zatia¾ nie je prerobenı),
+    návod, ako prida ïalšie hradlo (NAND, NOR, XOR...).
+
+Keïe v tomto prostredí nemám JavaFX SDK na reálne skompilovanie, prešiel som kód ruène (typová konzistencia medzi triedami, iadne zvyšné odkazy na Socket/Board/Device) — odporúèam po importe do vášho Maven/Gradle projektu spusti mvn compile, drobné preklepy v signatúrach sa dajú rıchlo doh¾ada pod¾a chybovıch hlášok.
+
+Chcete, aby som pokraèoval SchemeLoader-om (ukladanie/naèítanie), alebo radšej doplnil NAND/NOR/XOR a prepojenie do existujúceho FXML layoutu?
+Schematicsim
+ZIP 
+
+Urob loader.

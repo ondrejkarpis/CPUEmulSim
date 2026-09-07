@@ -1,0 +1,41 @@
+
+#breadboardLabel{
+    -fx-fill: white;
+    -fx-stroke: white;
+    -fx-alignment: center;
+    /*-fx-font-family: "Lucida Console", Monaco, monospace;*/
+    /*-fx-smooth: true;*/
+    /*-fx-font-smoothing-type: gray;*/
+}
+
+.btn-save {
+    -fx-graphic: url("../icons/save.png");
+}
+
+.btn-save-as {
+    -fx-graphic: url("../icons/save-as.png");
+}
+
+.btn-open {
+    -fx-graphic: url("../icons/open.png");
+}
+
+.btn-save {
+    -fx-graphic: url("../icons/save.png");
+}
+
+.btn-clear {
+    -fx-graphic: url("../icons/empty-trash.png");
+}
+
+.power-switch {
+    -fx-background-image: url("../icons/disconnected.png");
+    -fx-background-size: 18 18;
+    -fx-background-repeat: no-repeat;
+    -fx-background-position: 63px;
+}
+
+.power-switch:selected {
+    -fx-background-image: url("../icons/connected.png");
+
+}

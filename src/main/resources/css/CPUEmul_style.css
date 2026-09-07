@@ -1,0 +1,135 @@
+.keyword-arithmetic-and-logic, .keyword-shift-and-rotate, .keyword-move, .keyword-branch, .keyword-special{
+    -fx-font-weight: bold;
+}
+
+.keyword-arithmetic-and-logic {
+    -fx-fill: purple;
+}
+
+.keyword-shift-and-rotate {
+    -fx-fill: #80632a;
+}
+
+.keyword-move {
+    -fx-fill: #348038;
+}
+
+.keyword-branch {
+    -fx-fill: #144e80;
+}
+
+.keyword-special {
+    -fx-fill: #638000;
+}
+
+.label {
+    -fx-fill: #804000;
+    -fx-font-weight: bold;
+}
+.comment {
+    -fx-fill: cadetblue;
+}
+
+
+.paragraph-box:has-caret {
+    -fx-background-color: #f2f9fc;
+}
+
+.lineno{
+    -fx-font-family: monospace;
+    -fx-font-style: normal;
+    -fx-padding: 0 5 0 5;
+    -fx-background-color: #ddd;
+    -fx-text-fill: #666;
+}
+
+.execution-line{
+    -fx-background-color: #caffca !important;
+}
+
+.paragraph-error{
+    -fx-background-color: #ffb1ae;
+}
+
+.break{
+    -fx-background-color: #ff8331;
+}
+
+/* Tabulky */
+.table-row-cell:data-changed{
+    -fx-background-color: #fdadbd;
+}
+
+.table-row-cell:stack-head{
+    -fx-background-color: #7eb6fd;
+}
+
+/* SplitPane */
+.split-pane *.split-pane-divider {
+    -fx-padding: 0 1 0 1;
+}
+
+/* Menu icons */
+.item-open > .label {
+    -fx-graphic: url("../icons/open.png");
+}
+
+.item-new > .label {
+    -fx-graphic: url("../icons/file.png");
+}
+
+.item-save > .label {
+    -fx-graphic: url("../icons/save.png");
+}
+
+.item-save-as > .label {
+    -fx-graphic: url("../icons/save-as.png");
+}
+
+.item-close > .label {
+    -fx-graphic: url("../icons/close-window.png");
+}
+
+.item .accelerator-text {
+    -fx-graphic: none;
+}
+
+.btn-new {
+    -fx-graphic: url("../icons/file.png");
+}
+
+.btn-open {
+    -fx-graphic: url("../icons/open.png");
+}
+
+.btn-save {
+    -fx-graphic: url("../icons/save.png");
+}
+
+.btn-save-as {
+    -fx-graphic: url("../icons/save-as.png");
+}
+
+.btn-parse {
+    -fx-graphic: url("../icons/check.png");
+}
+
+.btn-play {
+    -fx-graphic: url("../icons/play.png");
+}
+
+.btn-step {
+    -fx-graphic: url("../icons/step-over.png");
+}
+
+.btn-pause {
+    -fx-graphic: url("../icons/pause.png");
+}
+
+.btn-reset {
+    -fx-graphic: url("../icons/reset.png");
+}
+
+.btn-stop {
+    -fx-graphic: url("../icons/stop.png");
+}

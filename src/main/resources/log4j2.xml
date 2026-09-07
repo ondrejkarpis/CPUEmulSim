@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>  <!--status="warn"> use status="trace" for troubleshooting -->
+    <Appenders>
+        <!--<Console name="Console">-->
+            <!--<PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>-->
+        <!--</Console>-->
+        <Console name="STDOUT" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d %-5p [%t] %C{2} (%F:%L) - %m%n"/>
+        </Console>
+        <!--<File name="FILE" fileName="app.log" append="false">-->
+        <!--<PatternLayout>-->
+        <!--<pattern>%p [%t] %c{1.} %m%n</pattern>-->
+        <!--</PatternLayout>-->
+        <!--</File>-->
+        <!--<File name="QUEUE_FILE" fileName="queue.log" append="false">-->
+        <!--<PatternLayout>-->
+        <!--<pattern>%p [%-16t] %c{1.} %m%n</pattern>-->
+        <!--</PatternLayout>-->
+        <!--</File>-->
+        <!--<File name="times_CPU_file" fileName="CPU.log" append="false">-->
+        <!--    <PatternLayout>-->
+        <!--        <pattern>%m%n</pattern>-->
+                <!--<pattern>%d %p [%t] %c{1.} %m%n</pattern>-->
+        <!--    </PatternLayout>-->
+        <!--</File>-->
+    </Appenders>
+    <Loggers>
+        <Root level="ERROR">
+            <AppenderRef ref="STDOUT"/>
+        </Root>
+            <logger name="times_CPU" level="info">
+                <!--    <AppenderRef ref="times_CPU_file"/>-->
+                <AppenderRef ref="STDOUT"/>
+            </logger>
+        <!--<Root level="fatal">-->
+        <!--&lt;!&ndash;<AppenderRef ref="STDOUT" level="info"/>&ndash;&gt;-->
+        <!--&lt;!&ndash;<AppenderRef ref="FILE" level="debug"/>&ndash;&gt;-->
+        <!--</Root>-->
+        <!--<Logger name="QueueLogger" level="debug">-->
+        <!--&lt;!&ndash;<AppenderRef ref="QUEUE_FILE"/>&ndash;&gt;-->
+        <!--</Logger>-->
+        <!--<Logger name="times_CPU" level="info">-->
+        <!--&lt;!&ndash;<AppenderRef ref="times_CPU_file"/>&ndash;&gt;-->
+        <!--</Logger>-->
+    </Loggers>
+</Configuration>

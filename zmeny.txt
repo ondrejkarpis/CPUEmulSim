@@ -1,0 +1,39 @@
+1.6
+- pokus o programovanie pomocou AI
+
+1.4.3
+- zapinanie a vypinanie logovania do konzoly pomocou Ctrl-F12
+  (aby fungovalo, treba pustit program z konzoly: java -jar CPUemul.jar)
+  - vypisuje pocet vykonanych instrukcii kazdu sekundu
+
+1.4.2
+- uprava vyvolavania prerusenia - po kazdej instrukcii
+  - opravilo to opakovane vyvolavanie preruseni v urcitych pripadoch 
+    (ked bola dlzka obsluzneho programu "nevhodna")
+
+1.4.1
+- citanie nahodnych dat po kazdej instrukcii inn
+- generovanie nahodnych cisiel na nezapojenych vstupoch
+
+1.4
+- odstranenie podpory USB
+
+1.3.3
+- zmena popisu (bity na bajty) - 8 kB pamat
+
+1.3.2
+- komentovanie/odkomentovanie bloku (CTRL + /) - robi problemy, ak su v komentaroch niekde znaky ‘’
+- pridanie podmienenych skokov a volani: JL, JG, JE, JNL, JNG, JNE, JGE, JLE, CL, CG ...
+- odstranena chyba ak bola sama bodkociarka na zaciatku riadku (neplatna instrukcia)
+- odstr. chyba pri zadani 0X namiesto 0x (teraz su mozne obidva sposoby)
+- nazov otvoreneho programu pridany do zahlavia
+- Ctrl + F9 - zmensovanie fontu
+- Ctrl + F10 - zvecsovanie fontu
+
+1.3.1
+- zrusenie focusu zo Stop tlacidla pri spusteni programu
+- pridane okno About
+- navestie moze zacinat na "int" (nepovazuje sa automaticky za prerusenie)
+- ovladanie programu aj zo simulatora dosky
+- oprava cislovania komponentov (generovanie Id)
+- oprava vypoctu potencialu pri spojeni klavesnice a DB
