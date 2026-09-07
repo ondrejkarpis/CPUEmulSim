@@ -149,6 +149,7 @@ public class CPUController implements Initializable {
     private Button btnSimulator;
     public Stage breadboardStage;
     private BreadboardController breadboardController;
+    private Stage schematicStage;
 
 	//registre
 	@FXML private TextField tfRegA;
@@ -514,6 +515,11 @@ public class CPUController implements Initializable {
     public void setBreadboardStage(Stage stageToShow, BreadboardController breadboardController) {
         this.breadboardStage = stageToShow;
         this.breadboardController = breadboardController;
+        this.btnSimulator.setDisable(false);
+    }
+
+    public void setSchematicStage(Stage stageToShow) {
+        this.schematicStage = stageToShow;
         this.btnSimulator.setDisable(false);
     }
 
@@ -1026,10 +1032,10 @@ public class CPUController implements Initializable {
     //TLACIDLO PRE OTVORENIE SIMULATORA
     @FXML
     private void handleButtonSimulatorAction() {
-        if (breadboardStage.isShowing()) {
-            breadboardStage.hide();
+        if (schematicStage.isShowing()) {
+            schematicStage.hide();
         } else {
-            breadboardStage.show();
+            schematicStage.show();
         }
     }
 

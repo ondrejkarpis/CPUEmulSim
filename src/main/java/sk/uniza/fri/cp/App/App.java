@@ -8,9 +8,20 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.Label;
 import javafx.stage.Stage;
 import sk.uniza.fri.cp.App.BreadboardControl.BreadboardController;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
+import sk.uniza.fri.cp.SchematicSim.DescriptionPane;
+import sk.uniza.fri.cp.SchematicSim.ItemPicker;
+import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
+import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
+import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
+import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
 /**
  * Aplikácia simulátora vývojovej dosky FRI UNIZA a emulátor 8 bitového CPU.
@@ -129,5 +140,28 @@ public class App extends Application {
         ((CPUController) CpuLayoutLoader.getController()).setBreadboardStage(breadboardStage, breadboardLayoutLoader.getController());
         // odlozenie handle na CPU controller
         ((BreadboardController) breadboardLayoutLoader.getController()).setCPUController(CpuLayoutLoader.getController());
+
+        // SchematicSim - okno kreslenia schémy, ktoré otvára tlačidlo Simulátor.
+        SchematicSheet schematicSheet = new SchematicSheet(1200, 800, 20);
+        ItemPicker itemPicker = new ItemPicker();
+        DescriptionPane descriptionPane = new DescriptionPane();
+        itemPicker.registerItem(new AndGate());
+        itemPicker.registerItem(new OrGate());
+        itemPicker.registerItem(new NotGate());
+        itemPicker.setPanelForDescription(descriptionPane);
+        schematicSheet.setDescriptionPane(descriptionPane);
+
+        SplitPane schematicContent = new SplitPane(itemPicker, schematicSheet);
+        schematicContent.setDividerPositions(0.2);
+        VBox descriptionBox = new VBox(new Label("Popis"), descriptionPane);
+        VBox.setVgrow(descriptionPane, Priority.ALWAYS);
+        BorderPane schematicRoot = new BorderPane(schematicContent);
+        schematicRoot.setBottom(descriptionBox);
+
+        Stage schematicStage = new Stage();
+        schematicStage.setTitle("Simulátor - Schéma");
+        schematicStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/simulator_icon_128.png")));
+        schematicStage.setScene(new Scene(schematicRoot, 1280, 850));
+        ((CPUController) CpuLayoutLoader.getController()).setSchematicStage(schematicStage);
     }
 }
