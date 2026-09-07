@@ -77,12 +77,6 @@ public class WireEnd extends Joint {
      */
     public void connect(Pin target) {
         if (this.pin == null) {
-            WireEnd existingEnd = target != null ? target.getWireEnd() : null;
-            if (existingEnd != null && existingEnd.getWire() != this.getWire()
-                    && !target.getOwner().getSheet().getSimulatorWires().contains(existingEnd.getWire())) {
-                existingEnd.releasePin();
-            }
-
             if (target != null && !target.isOccupied()) {
                 this.pin = target;
                 this.pin.setWireEnd(this);
@@ -96,8 +90,6 @@ public class WireEnd extends Joint {
                 lastPosX = getLayoutX();
                 lastPosY = getLayoutY();
 
-                this.getWire().setMouseTransparent(false);
-                this.getWire().setOpacity(1);
                 this.setColor(this.getWire().getColor().brighter());
                 this.getWire().updatePotential();
             } else {
@@ -154,12 +146,4 @@ public class WireEnd extends Joint {
         }
     }
 
-    void releasePin() {
-        if (this.pin == null) return;
-
-        Pin connectedPin = this.pin;
-        connectedPin.getOwner().localToParentTransformProperty().removeListener(pinPositionChangeListener);
-        this.pin = null;
-        if (connectedPin.getWireEnd() == this) connectedPin.clearWireEnd();
-    }
 }

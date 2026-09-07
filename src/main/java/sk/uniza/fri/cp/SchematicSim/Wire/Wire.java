@@ -303,14 +303,9 @@ public class Wire extends HighlightGroup {
     @Override
     public void delete() {
         super.delete();
-        Pin startPin = this.ends[0].getPin();
-        Pin endPin = this.ends[1].getPin();
+        this.ends[0].disconnect();
+        this.ends[1].disconnect();
         this.getSheet().removeItem(this);
-        this.ends[0].releasePin();
-        this.ends[1].releasePin();
-        if (startPin != null && startPin.getWireEnd() == this.ends[0]) startPin.clearWireEnd();
-        if (endPin != null && endPin.getWireEnd() == this.ends[1]) endPin.clearWireEnd();
-        this.updatePotential();
     }
 
     @Override

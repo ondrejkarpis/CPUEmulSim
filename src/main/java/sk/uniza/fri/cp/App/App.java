@@ -168,18 +168,9 @@ public class App extends Application {
         schematicStage.setTitle("Simulátor - Schéma");
         schematicStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/simulator_icon_128.png")));
         Scene schematicScene = new Scene(schematicRoot, 1280, 850);
-        final boolean[] deleteKeyDown = {false};
-        schematicScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
-            if ((event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE)
-                    && !deleteKeyDown[0]) {
-                deleteKeyDown[0] = true;
-                schematicSheet.deleteSelect();
-                event.consume();
-            }
-        });
         schematicScene.addEventFilter(KeyEvent.KEY_RELEASED, event -> {
             if (event.getCode() == KeyCode.DELETE || event.getCode() == KeyCode.BACK_SPACE) {
-                deleteKeyDown[0] = false;
+                schematicSheet.deleteSelect();
                 event.consume();
             }
         });
