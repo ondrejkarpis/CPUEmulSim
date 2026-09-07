@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * Potenciál medzi dvoma bodmi siete (Pin alebo Joint). Prepájanie bodov potenciálom
@@ -32,6 +33,7 @@ public class Potential {
     // skrat
     private boolean shortCircuit;
     private final LinkedList<Connectable> shortedNodes;
+    private final List<Runnable> valueListeners = new ArrayList<>();
 
     public Potential(Connectable node1, Connectable node2) {
         this.shortedNodes = new LinkedList<>();
@@ -104,6 +106,22 @@ public class Potential {
         return value;
     }
 
+    public synchronized void addValueListener(Runnable listener) {
+        valueListeners.add(listener);
+    }
+
+    public synchronized void removeValueListener(Runnable listener) {
+        valueListeners.remove(listener);
+    }
+
+    private void notifyValueListeners() {
+        List<Runnable> listeners;
+        synchronized (this) {
+            listeners = new ArrayList<>(valueListeners);
+        }
+        listeners.forEach(Runnable::run);
+    }
+
     /**
      * Nastavenie novej hodnoty potenciálu. Berie do úvahy typ potenciálu a hodnoty predkov.
      * Kontroluje aj skrat pri spojení dvoch rozdielnych výstupov.
@@ -174,6 +192,8 @@ public class Potential {
         if (this.shortCircuit && this.child == null) this.highlightShortCircuitNodes();
 
         if (this.child != null) return this.child.setValue(this.value);
+
+        notifyValueListeners();
 
         return !this.shortCircuit;
     }

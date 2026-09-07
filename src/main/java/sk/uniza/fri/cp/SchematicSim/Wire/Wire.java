@@ -2,6 +2,7 @@ package sk.uniza.fri.cp.SchematicSim.Wire;
 
 import javafx.event.Event;
 import javafx.event.EventHandler;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.control.ColorPicker;
@@ -36,6 +37,7 @@ public class Wire extends HighlightGroup {
 
     private Color color;
     private Potential potential;
+    private final Runnable potentialValueListener = () -> Platform.runLater(this::refreshStateLabel);
 
     private final WireEnd[] ends;
     private final List<Joint> joints;
@@ -278,6 +280,7 @@ public class Wire extends HighlightGroup {
      */
     void updatePotential() {
         if (this.potential != null) {
+            this.potential.removeValueListener(potentialValueListener);
             this.potential.delete();
             this.potential = null;
         }
@@ -289,6 +292,7 @@ public class Wire extends HighlightGroup {
 
             if (start != null && end != null) {
                 this.potential = new Potential(start, end);
+                this.potential.addValueListener(potentialValueListener);
                 toUpdate = start;
             } else {
                 toUpdate = start != null ? start : end;
@@ -298,6 +302,12 @@ public class Wire extends HighlightGroup {
                 getSheet().addEvent(new SheetEvent(toUpdate));
             }
         }
+        refreshStateLabel();
+    }
+
+    private void refreshStateLabel() {
+        Potential.Value value = this.potential == null ? Potential.Value.NC : this.potential.getValue();
+        this.segments.forEach(segment -> segment.setState(value));
     }
 
     @Override

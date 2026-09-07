@@ -4,6 +4,10 @@ import javafx.geometry.Point2D;
 import javafx.scene.Group;
 import javafx.scene.paint.Paint;
 import javafx.scene.shape.Polyline;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 
 import java.util.List;
 import java.util.stream.Stream;
@@ -22,6 +26,7 @@ public class WireSegment extends Group {
     private Joint startJoint;
     private Joint endJoint;
     private final Polyline line = new Polyline();
+    private final Text stateLabel = new Text("Z");
 
     WireSegment(Wire wire, Joint start, Joint end) {
         this.wire = wire;
@@ -35,7 +40,10 @@ public class WireSegment extends Group {
         this.line.setFill(null);
         this.line.setStroke(wire.getColor());
         this.line.setOpacity(1);
+        this.stateLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        this.stateLabel.setMouseTransparent(true);
         this.getChildren().add(line);
+        this.getChildren().add(stateLabel);
 
         // na rozdiel od originálu (priama väzba property-bindingom) tu trasa nie je lineárna
         // funkcia koncových bodov, preto počúvame na zmenu polohy a prepočítavame ju ručne
@@ -55,6 +63,41 @@ public class WireSegment extends Group {
 
         Double[] flat = path.stream().flatMap(p -> Stream.of(p.getX(), p.getY())).toArray(Double[]::new);
         line.getPoints().setAll(flat);
+        updateStateLabel();
+    }
+
+    void updateStateLabel() {
+        List<Double> points = line.getPoints();
+        if (points.size() < 4) return;
+
+        double totalLength = 0;
+        for (int index = 2; index < points.size(); index += 2) {
+            totalLength += Math.abs(points.get(index) - points.get(index - 2))
+                    + Math.abs(points.get(index + 1) - points.get(index - 1));
+        }
+
+        double halfway = totalLength / 2;
+        double travelled = 0;
+        for (int index = 2; index < points.size(); index += 2) {
+            double x1 = points.get(index - 2);
+            double y1 = points.get(index - 1);
+            double x2 = points.get(index);
+            double y2 = points.get(index + 1);
+            double length = Math.abs(x2 - x1) + Math.abs(y2 - y1);
+            if (travelled + length >= halfway) {
+                double ratio = length == 0 ? 0 : (halfway - travelled) / length;
+                double labelX = x1 + (x2 - x1) * ratio;
+                double labelY = y1 + (y2 - y1) * ratio - 4;
+                stateLabel.relocate(labelX - stateLabel.getLayoutBounds().getWidth() / 2, labelY - 10);
+                return;
+            }
+            travelled += length;
+        }
+    }
+
+    void setState(Potential.Value value) {
+        stateLabel.setText(value == Potential.Value.HIGH ? "1" : value == Potential.Value.LOW ? "0" : "Z");
+        updateStateLabel();
     }
 
     public Wire getWire() {
