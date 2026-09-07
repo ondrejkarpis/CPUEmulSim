@@ -18,6 +18,9 @@ import sk.uniza.fri.cp.App.BreadboardControl.BreadboardController;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
 import sk.uniza.fri.cp.SchematicSim.DescriptionPane;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
+import sk.uniza.fri.cp.SchematicSim.Buses.AddressBus16;
+import sk.uniza.fri.cp.SchematicSim.Buses.ControlBus;
+import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
@@ -148,6 +151,9 @@ public class App extends Application {
         itemPicker.registerItem(new AndGate());
         itemPicker.registerItem(new OrGate());
         itemPicker.registerItem(new NotGate());
+        itemPicker.registerItem(new AddressBus16());
+        itemPicker.registerItem(new DataBus8());
+        itemPicker.registerItem(new ControlBus());
         itemPicker.setPanelForDescription(descriptionPane);
         schematicSheet.setDescriptionPane(descriptionPane);
 
