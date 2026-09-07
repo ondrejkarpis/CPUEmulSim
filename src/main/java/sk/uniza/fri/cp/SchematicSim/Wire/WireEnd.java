@@ -96,6 +96,8 @@ public class WireEnd extends Joint {
                 lastPosX = getLayoutX();
                 lastPosY = getLayoutY();
 
+                this.getWire().setMouseTransparent(false);
+                this.getWire().setOpacity(1);
                 this.setColor(this.getWire().getColor().brighter());
                 this.getWire().updatePotential();
             } else {
