@@ -92,6 +92,10 @@ public class WireEnd extends Joint {
 
                 this.setColor(this.getWire().getColor().brighter());
                 this.getWire().updatePotential();
+                if (this.getWire().areBothEndsConnected()) {
+                    getSheet().clearSelect();
+                    getSheet().addSelect(this.getWire());
+                }
             } else {
                 this.setColor(Color.RED);
             }
