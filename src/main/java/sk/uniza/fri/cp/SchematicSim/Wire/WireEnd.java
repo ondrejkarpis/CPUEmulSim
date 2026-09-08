@@ -105,6 +105,28 @@ public class WireEnd extends Joint {
         return pin;
     }
 
+    /**
+     * Prepočítanie pozície konca vodiča podľa aktuálnej polohy pinu (používa sa pri premiestnení
+     * vývodu na súčiastke, kedy sa pin sám presunul - posun tela súčiastky rieši listener vyššie).
+     */
+    public void refreshPosition() {
+        if (pin == null) return;
+
+        if (lastPosX == -1) {
+            lastPosX = getLayoutX();
+            lastPosY = getLayoutY();
+        }
+
+        Point2D p = pin.getSceneGridPosition();
+        setLayoutX(p.getX() / getSheet().getAppliedScale());
+        setLayoutY(p.getY() / getSheet().getAppliedScale());
+
+        getWire().moveJointsWithEnd(this, getLayoutX() - lastPosX, getLayoutY() - lastPosY);
+
+        lastPosX = getLayoutX();
+        lastPosY = getLayoutY();
+    }
+
     @Override
     public Side getExitSide() {
         return pin != null ? pin.getExitSide() : null;

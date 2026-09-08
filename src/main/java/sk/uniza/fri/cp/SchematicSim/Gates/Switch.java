@@ -1,6 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -13,10 +15,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Samostatný prepínač - farebný kruh s jedným prípojným bodom {@code O} (vľavo).
- * Kliknutím na kruh sa stav prepne (červený = zapnutý, bielosivý = vypnutý). Vývod
- * {@code O} trvalo generuje HIGH pre zapnutý prepínač a LOW pre vypnutý, bez ohľadu
- * na akékoľvek riadiace signály (popri prepínači nie je žiadny IR_ pin).
+ * Samostatný prepínač - farebný kruh s jedným prípojným bodom {@code O}. Kliknutím na kruh
+ * sa stav prepne (červený = zapnutý, bielosivý = vypnutý). Pravým tlačidlom myši sa otvorí
+ * kontextové menu na výber umiestnenia vývodu (vpravo/vľavo/hore/dole); štandardne je vývod
+ * vpravo. Vývod {@code O} trvalo generuje HIGH pre zapnutý prepínač a LOW pre vypnutý.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -30,6 +32,7 @@ public class Switch extends GateSymbol {
 
     private Pin outPin;
     private Circle button;
+    private ContextMenu contextMenu;
 
     private volatile boolean on = false;
 
@@ -45,7 +48,7 @@ public class Switch extends GateSymbol {
 
     @Override
     protected List<Pin> createPins() {
-        outPin = new OutputPin(this, "O", 0, 1, Side.LEFT);
+        outPin = new OutputPin(this, "O", GRID_WIDTH, 1, Side.RIGHT);
         return Arrays.asList(outPin);
     }
 
@@ -58,9 +61,64 @@ public class Switch extends GateSymbol {
         button = new Circle(w / 2.0, h / 2.0, cell * 0.55, SWITCH_OFF);
         button.setStroke(Color.BLACK);
         button.setStrokeWidth(1.5);
-        button.setOnMouseClicked(event -> handleToggle());
+        button.setOnMouseClicked(event -> {
+            if (event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+                handleToggle();
+            }
+        });
+        button.setOnContextMenuRequested(event -> {
+            showPlacementMenu(event.getScreenX(), event.getScreenY());
+            event.consume();
+        });
 
         return new Pane(button);
+    }
+
+    private void showPlacementMenu(double screenX, double screenY) {
+        if (contextMenu == null) {
+            contextMenu = new ContextMenu(
+                    new MenuItem("Vývod vpravo"),
+                    new MenuItem("Vývod vľavo"),
+                    new MenuItem("Vývod hore"),
+                    new MenuItem("Vývod dole"));
+            contextMenu.getItems().get(0).setOnAction(e -> placeOutput(Side.RIGHT));
+            contextMenu.getItems().get(1).setOnAction(e -> placeOutput(Side.LEFT));
+            contextMenu.getItems().get(2).setOnAction(e -> placeOutput(Side.TOP));
+            contextMenu.getItems().get(3).setOnAction(e -> placeOutput(Side.BOTTOM));
+        }
+        contextMenu.show(button, screenX, screenY);
+    }
+
+    public void placeOutput(Side side) {
+        int cell = getSheet().getGrid().getSizeMin();
+        outPin.setLayoutX(placementOffsetX(side) * cell);
+        outPin.setLayoutY(placementOffsetY(side) * cell);
+        outPin.setSide(side);
+
+        // ak na vývode už visí vodič, presuň jeho koniec na novú polohu a preveď rerouting
+        if (outPin.getWireEnd() != null) {
+            outPin.getWireEnd().refreshPosition();
+        }
+    }
+
+    private static int placementOffsetX(Side side) {
+        switch (side) {
+            case LEFT: return 0;
+            case RIGHT: return GRID_WIDTH;
+            case TOP:
+            case BOTTOM: return 1;
+        }
+        return GRID_WIDTH;
+    }
+
+    private static int placementOffsetY(Side side) {
+        switch (side) {
+            case TOP: return 0;
+            case BOTTOM: return GRID_HEIGHT;
+            case LEFT:
+            case RIGHT: return 1;
+        }
+        return 1;
     }
 
     @Override
@@ -128,6 +186,6 @@ public class Switch extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Prepínač - klikom prepni, vývod O trvalo generuje HIGH/LOW";
+        return "Prepínač - klikom prepni, pravým tlačidlom vyber umiestnenie vývodu O (vpravo/vľavo/hore/dole)";
     }
 }

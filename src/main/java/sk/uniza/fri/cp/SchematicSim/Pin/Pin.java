@@ -43,7 +43,7 @@ public abstract class Pin extends Group implements Connectable {
     private final String name;
     private final Direction direction;
     private final int gridOffsetX, gridOffsetY;
-    private final Side side;
+    private Side side;
 
     private final Potential potential;
     private PinState state = PinState.NOT_CONNECTED;
@@ -211,6 +211,15 @@ public abstract class Pin extends Group implements Connectable {
     @Override
     public Side getExitSide() {
         return side;
+    }
+
+    /**
+     * Zmena strany, na ktorej vývod leží (napr. pri premiestnení vývodu cez kontextové menu).
+     * Ovplyvňuje smer, ktorým z pinu vychádza vodič pri ortogonálnom routingu. Pozícia pinu
+     * sa pritom na súčiastke presúva cez {@link #setLayoutX}/{@link #setLayoutY} u volajúceho.
+     */
+    public void setSide(Side side) {
+        this.side = side;
     }
 
     @Override
