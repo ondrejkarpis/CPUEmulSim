@@ -7,6 +7,8 @@ import javafx.concurrent.Service;
 import javafx.concurrent.Task;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
+import sk.uniza.fri.cp.Bus.Bus;
+import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 
 import java.util.HashSet;
@@ -40,19 +42,38 @@ public class SchematicSimulator {
 
                     running.setValue(true);
 
+                    // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
+                    Bus.getBus().setEventsQueue(eventsQueue);
+                    Bus.getBus().simulationIsRunning(true);
+                    Bus.getBus().dataIsChanging();
+
                     // počiatočné vyhodnotenie - nahrádza powerSockets.forEach(PowerSocket::powerUp)
                     allGates.forEach(GateSymbol::reset);
                     allGates.forEach(GateSymbol::simulate);
 
+                    // obnova hodnôt na zberniciach na vývody (pre prípad opätovného zapnutia simulácie)
+                    for (GateSymbol gate : allGates) {
+                        if (gate instanceof BusSymbol) ((BusSymbol) gate).syncFromBus();
+                    }
+
                     HashSet<GateSymbol> gatesToUpdate = new HashSet<>();
                     SheetEvent event;
                     long lastActivityTime = System.currentTimeMillis();
+                    boolean steadyState = false;
 
                     while (!isCancelled()) {
                         try {
                             event = eventsQueue.poll();
                             if (event == null) {
-                                event = eventsQueue.take();
+                                if (eventsQueue.size() > 0) {
+                                    event = eventsQueue.take();
+                                } else {
+                                    // simulácia je ustálená - CPU môže bezpečne čítať dáta zo zbernice
+                                    Bus.getBus().dataInSteadyState();
+                                    steadyState = true;
+                                    event = eventsQueue.take();
+                                    lastActivityTime = System.currentTimeMillis();
+                                }
                             }
 
                             if (System.currentTimeMillis() - lastActivityTime > ASYNCH_TIMEOUT_MS) {
@@ -65,11 +86,16 @@ public class SchematicSimulator {
                                 break;
                             }
 
+                            if (steadyState) {
+                                // podujatie sa našlo - dáta sa menia, CPU nesmie čítať
+                                Bus.getBus().dataIsChanging();
+                                steadyState = false;
+                            }
+
                             event.process(gatesToUpdate);
                             gatesToUpdate.forEach(GateSymbol::simulate);
                             gatesToUpdate.clear();
 
-                            lastActivityTime = System.currentTimeMillis();
                         } catch (InterruptedException e) {
                             if (isCancelled()) break;
                         } catch (NullPointerException e) {
@@ -77,6 +103,8 @@ public class SchematicSimulator {
                             gatesToUpdate.clear();
                         }
                     }
+
+                    Bus.getBus().dataIsChanging();
 
                     while (!eventsQueue.isEmpty()) {
                         eventsQueue.take().process(gatesToUpdate);
@@ -86,6 +114,7 @@ public class SchematicSimulator {
 
                     allGates.forEach(GateSymbol::reset);
                     running.setValue(false);
+                    Bus.getBus().simulationIsRunning(false);
                     return null;
                 }
             };

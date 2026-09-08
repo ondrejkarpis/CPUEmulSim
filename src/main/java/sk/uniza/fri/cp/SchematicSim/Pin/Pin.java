@@ -59,9 +59,10 @@ public abstract class Pin extends Group implements Connectable {
 
     private final EventHandler<MouseEvent> onMouseDragged = event -> {
         if (!event.isPrimaryButtonDown()) return;
-        if (creatingWire == null) startCreatingWire();
-        Point2D sheetXY = owner.getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-        creatingWire.catchFreeEnd().moveTo(sheetXY.getX(), sheetXY.getY());
+        if (creatingWire != null) {
+            Point2D sheetXY = owner.getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
+            creatingWire.catchFreeEnd().moveTo(sheetXY.getX(), sheetXY.getY());
+        }
         event.consume();
     };
 
@@ -77,17 +78,15 @@ public abstract class Pin extends Group implements Connectable {
 
     private final EventHandler<MouseEvent> onMouseDragDetected = event -> {
         if (!event.isPrimaryButtonDown()) return;
-        startCreatingWire();
-        event.consume();
-    };
-
-    private void startCreatingWire() {
         startFullDrag();
+
         creatingWire = new Wire(this);
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         owner.getSheet().addItem(creatingWire);
-    }
+
+        event.consume();
+    };
 
     private final EventHandler<MouseDragEvent> onMouseDragReleased = event -> {
         if (creatingWire != null) {

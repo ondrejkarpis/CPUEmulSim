@@ -38,7 +38,6 @@ import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.richtext.InlineCssTextArea;
 import sk.uniza.fri.cp.App.AboutDialog;
-import sk.uniza.fri.cp.App.BreadboardControl.BreadboardController;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
@@ -48,6 +47,7 @@ import sk.uniza.fri.cp.CPUEmul.CPUStates;
 import sk.uniza.fri.cp.CPUEmul.Exceptions.InvalidCodeLinesException;
 import sk.uniza.fri.cp.CPUEmul.Parser;
 import sk.uniza.fri.cp.CPUEmul.Program;
+import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
 import javax.swing.*;
 import java.io.*;
@@ -147,9 +147,8 @@ public class CPUController implements Initializable {
 
     @FXML
     private Button btnSimulator;
-    public Stage breadboardStage;
-    private BreadboardController breadboardController;
     private Stage schematicStage;
+    private SchematicSheet schematicSheet;
 
 	//registre
 	@FXML private TextField tfRegA;
@@ -502,7 +501,7 @@ public class CPUController implements Initializable {
      */
     public boolean exit(){
         if(!fileSaved && !continueIfUnsavedFile()) return false;
-        if (!breadboardController.continueIfUnsavedFile()) return false;
+        if (!continueIfUnsavedSchematic()) return false;
         Platform.exit();
         return true;
     }
@@ -510,17 +509,26 @@ public class CPUController implements Initializable {
     /**
      * Nastavnie okna, ktoré sa má zobraziť po kliknutí na tlačidlo otvorenia simulátora.
      *
-     * @param stageToShow Javisko so simulátorom vývojovej dosky.
+     * @param stageToShow Javisko so simulátorom - schémou.
      */
-    public void setBreadboardStage(Stage stageToShow, BreadboardController breadboardController) {
-        this.breadboardStage = stageToShow;
-        this.breadboardController = breadboardController;
-        this.btnSimulator.setDisable(false);
-    }
-
     public void setSchematicStage(Stage stageToShow) {
         this.schematicStage = stageToShow;
         this.btnSimulator.setDisable(false);
+    }
+
+    /**
+     * Nastavenie plochy schémy, s ktorou CPU komunikuje cez zbernicu.
+     */
+    public void setSchematicSheet(SchematicSheet sheet) {
+        this.schematicSheet = sheet;
+    }
+
+    /**
+     * Verejná vlastnosť stavu CPU - pre okno simulátora, ktoré podľa neho povoluje/zakazuje
+     * tlačidlá behu programu.
+     */
+    public Property<CPUStates> cpuStateProperty() {
+        return cpu != null ? cpu.stateProperty() : null;
     }
 
     /**
@@ -892,6 +900,29 @@ public class CPUController implements Initializable {
     }
 
     /**
+     * Výstraha pre užívateľa, ak má aktuálna schéma nezmenené zmeny (zatiaľ bez uloženia).
+     *
+     * @return true - volajúca procedúra môže pokračovať, false - užívateľ chce zostať
+     */
+    private boolean continueIfUnsavedSchematic() {
+        if (schematicSheet == null || !schematicSheet.hasChanged()) return true;
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Potvrdenie");
+        alert.setHeaderText("Zmeny v schéme neboli uložené");
+        alert.setContentText("Schéma zatiaľ nepodporuje ukladanie. Pokračovať?");
+
+        ButtonType btnTypeNo = new ButtonType("Nie");
+        ButtonType btnTypeYes = new ButtonType("Pokračovať", ButtonBar.ButtonData.OK_DONE);
+
+        alert.getButtonTypes().clear();
+        alert.getButtonTypes().addAll(btnTypeYes, btnTypeNo);
+
+        Optional<ButtonType> result = alert.showAndWait();
+        return result.isPresent() && result.get() == btnTypeYes;
+    }
+
+    /**
      * Uloženie aktuálneho kódu nachádzajúceho sa v editore kódu do súboru.
      * Súbor môže užívateľ špecifikovať, alebo sa použije naposledy otvorený súbor, ak taký existuje.
      *
@@ -1166,7 +1197,9 @@ public class CPUController implements Initializable {
         //ak cpu bezi
         if(this.cpu != null && this.cpu.isAlive()){
             if (this.program.hasIOInstruction()) {
-                if (!breadboardController.powerOn())
+                boolean wasRunning = schematicSheet.isSimulationRunning();
+                schematicSheet.powerOn();
+                if (!wasRunning)
                     //ak bola simulacia vypnuta, pockaj chvilu na zahriatie
                     try {
                         Thread.sleep(100);
@@ -1241,9 +1274,6 @@ public class CPUController implements Initializable {
         btnStop.setDisable(false);
         btnReset.setDisable(true);
 
-        // tlacidla v simulatore
-        breadboardController.setButtons(1);
-
         codeEditor.setEditable(false);
         // focus na editor (aby stlacenie medzery nesposobilo koniec programu, ak je focus na tlacidle Stop)
         codeEditor.requestFocus();
@@ -1270,9 +1300,6 @@ public class CPUController implements Initializable {
         btnStop.setDisable(false);
         btnReset.setDisable(true);
 
-        // tlacidla v simulatore
-        breadboardController.setButtons(2);
-
         updateGUI();
     }
 
@@ -1296,8 +1323,6 @@ public class CPUController implements Initializable {
         btnStop.setDisable(false);
         btnReset.setDisable(true);
 
-        // tlacidla v simulatore
-        breadboardController.setButtons(3);
     }
 
     /**
@@ -1322,8 +1347,8 @@ public class CPUController implements Initializable {
         btnStop.setDisable(true);
         btnReset.setDisable(false);
 
-        // tlacidla v simulatore
-        breadboardController.setButtons(4);
+        // po skončení vykonávania programu vypneme schému
+        if (schematicSheet != null) schematicSheet.powerOff();
 
         codeEditor.setEditable(true);
 

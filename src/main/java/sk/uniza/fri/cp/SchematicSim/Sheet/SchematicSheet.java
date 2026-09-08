@@ -22,9 +22,11 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
+import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Plocha simulátora - schematický editor. Nahrádza {@code Board} z BreadboardSim.
@@ -291,6 +293,20 @@ public class SchematicSheet extends ScrollPane {
 
     public SchematicSimulator getSimulator() {
         return simulator;
+    }
+
+    /**
+     * Všetky súčiastky aktuálne umiestnené na ploche.
+     */
+    public List<GateSymbol> getGates() {
+        return layersManager.getGates();
+    }
+
+    /**
+     * Všetky vodiče aktuálne na ploche.
+     */
+    public List<Wire> getWires() {
+        return layersManager.getWires();
     }
 
     public void addEvent(SheetEvent event) {
