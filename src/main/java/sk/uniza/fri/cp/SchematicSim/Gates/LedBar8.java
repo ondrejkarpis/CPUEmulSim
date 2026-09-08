@@ -119,10 +119,16 @@ public class LedBar8 extends GateSymbol {
 
     /**
      * Aktualizácia vizuálu vždy na FX vlákne (simulácia beží na separátnom vlákne).
+     * Zmeny sú skoalescované do jednej čakajúcej úlohy, aby sa pri rýchlej simulácii
+     * FX vlákno nezahltilo radom a aplikácia (klávesy F4/F5/F10...) ostala odozvá.
      */
+    private volatile boolean visualUpdateScheduled;
+
     private void refreshVisual() {
-        if (leds == null) return;
+        if (leds == null || visualUpdateScheduled) return;
+        visualUpdateScheduled = true;
         Platform.runLater(() -> {
+            visualUpdateScheduled = false;
             for (int index = 0; index < 8; index++) {
                 leds[index].setFill(((currentValue & (1 << index)) != 0) ? LED_ON : LED_OFF);
             }

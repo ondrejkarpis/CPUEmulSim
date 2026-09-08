@@ -37,7 +37,21 @@ public class Wire extends HighlightGroup {
 
     private Color color;
     private Potential potential;
-    private final Runnable potentialValueListener = () -> Platform.runLater(this::refreshStateLabel);
+    private volatile boolean labelUpdateScheduled;
+
+    // pri kontinuálnom behu simulácie by každá zmena potenciálu vytvorila samostatnú runLater
+    // úlohu a FX vlákno by nestíhalo vyprázdňovať rad -> aplikácia (napr. klávesa F10) by nereagovala.
+    // Zmeny preto skoalescujeme do jednej čakajúcej úlohy - vykoná sa len najnovší stav.
+    private final Runnable potentialValueListener = () -> scheduleStateLabelRefresh();
+
+    private void scheduleStateLabelRefresh() {
+        if (labelUpdateScheduled) return;
+        labelUpdateScheduled = true;
+        Platform.runLater(() -> {
+            labelUpdateScheduled = false;
+            refreshStateLabel();
+        });
+    }
 
     private final WireEnd[] ends;
     private final List<Joint> joints;
