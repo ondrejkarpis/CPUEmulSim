@@ -1,5 +1,5 @@
 1.6
-- pokus o programovanie pomocou AI
+- náhrada breadboardu editorom schém
 
 1.4.3
 - zapinanie a vypinanie logovania do konzoly pomocou Ctrl-F12
@@ -22,7 +22,7 @@
 - zmena popisu (bity na bajty) - 8 kB pamat
 
 1.3.2
-- komentovanie/odkomentovanie bloku (CTRL + /) - robi problemy, ak su v komentaroch niekde znaky ��
+- komentovanie/odkomentovanie bloku (CTRL + /) - robi problemy, ak su v komentaroch niekde znaky ‘’
 - pridanie podmienenych skokov a volani: JL, JG, JE, JNL, JNG, JNE, JGE, JLE, CL, CG ...
 - odstranena chyba ak bola sama bodkociarka na zaciatku riadku (neplatna instrukcia)
 - odstr. chyba pri zadani 0X namiesto 0x (teraz su mozne obidva sposoby)
