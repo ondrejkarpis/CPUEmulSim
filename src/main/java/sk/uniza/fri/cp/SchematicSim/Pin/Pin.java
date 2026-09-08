@@ -192,6 +192,15 @@ public abstract class Pin extends Group implements Connectable {
         return potential != null ? potential.getPotential() : null;
     }
 
+    /**
+     * Vlastný potenciál tohto pinu - na rozdiel od {@link #getPotential()} nevracia agregát
+     * celej siete (vodiča), ale samotný list spojení. Zmena hodnoty sa zapisuje práve na
+     * list a odtiaľ sa cez {@link Potential#setValue} rozšíri do agregovaného potenciálu siete.
+     */
+    public Potential getOwnedPotential() {
+        return potential;
+    }
+
     @Override
     public Point2D getSceneGridPosition() {
         return new Point2D(

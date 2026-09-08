@@ -14,12 +14,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 8-bitový vstupný prepínač pre inštrukciu {@code INN}.
+ * 8-bitový vstupný prepínač (vstup pre inštrukciu {@code INN}).
  * Stavy jednotlivých bitov sa prepínajú kliknutím na kruhy v tele súčiastky.
- * Svoje vývody D0..D7 naháňa IBA počas aktívneho riadiaceho signálu {@code IR_} (log. 0) -
- * vtedy na zbernici zastupuje vstupné zariadenie a DataBus8 jeho hodnotu prečíta.
- * V ostatných prípadoch sú vývody v stave high-impedance (tri-state), aby nezavadzali
- * ostatným zariadeniam na dátovej zbernici.
+ * Vývody D0..D7 trvalo generujú stav prepínačov (HIGH pre zapnutý bit, LOW pre vypnutý)
+ * bez ohľadu na riadiaci signál {@code IR_}. Pin IR_ je ponechaný kvôli kompatibilite
+ * so schémami zo zbernice, ale už neovplyvňuje výstup. Pozor: ak sa takýto prepínač
+ * pripojí na dátovú zbernicu súbežne s RAM, pri čítaní pamäte môže dôjsť ku skratu -
+ * pre obojsmerné použitie na zbernici treba výstupy deliť iným spôsobom (napr. BP).
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -96,15 +97,9 @@ public class Switches8 extends GateSymbol {
 
     @Override
     public void simulate() {
-        boolean active = isLow(pinIR_);
+        // prepínač generuje výstup stále, bez ohľadu na stav IR_
         for (int index = 0; index < 8; index++) {
-            Pin.PinState state;
-            if (active) {
-                state = switchState[index] ? Pin.PinState.HIGH : Pin.PinState.LOW;
-            } else {
-                state = Pin.PinState.HIGH_IMPEDANCE;
-            }
-            setPin(dataPins[index], state);
+            setPin(dataPins[index], switchState[index] ? Pin.PinState.HIGH : Pin.PinState.LOW);
         }
     }
 
@@ -118,9 +113,8 @@ public class Switches8 extends GateSymbol {
         switchState[index] = !switchState[index];
         refreshVisual();
 
-        // ak beží simulácia a je IR_ zapojené, okamžite prepočítaj vývody (vytvorí zmenové udalosti)
-        if (getSheet() != null && getSheet().isSimulationRunning()
-                && pinIR_ != null && pinIR_.isConnected()) {
+        // ak beží simulácia, okamžite prepočítaj vývody, aby sa zmena rozšírila do vodičov a LED
+        if (getSheet() != null && getSheet().isSimulationRunning()) {
             simulate();
         }
     }
@@ -158,7 +152,7 @@ public class Switches8 extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "8 prepínačov (vstup pre INN) - klikom zmeň bit, na zbernicu púšťa dáta pri aktívnom IR_";
+        return "8 prepínačov (vstup pre INN) - klikom zmeň bit, vývody D0..D7 trvalo generujú HIGH/LOW";
     }
 
     private static class IoPin extends Pin {

@@ -17,8 +17,9 @@ import java.util.List;
 /**
  * 8-bitový výstupný zobrazovač (8 LED) pre inštrukciu {@code OUT}.
  * Vstupné dáta zachytí do latche v okamihu, keď je riadiaci signál {@code IW_} aktívny (log. 0).
- * LED sú čisto pasívne - zariadenie nemá žiadne výstupné vývody, nikdy nehynie na zbernicu,
- * a preto nemôže spôsobiť skrat.
+ * Ak {@code IW_} nie je zapojený (samostatné použitie), LED priamo odzrkadľujú aktuálnu
+ * hodnotu na vstupe. LED sú čisto pasívne - zariadenie nemá žiadne výstupné vývody,
+ * nikdy nehynie na zbernicu, a preto nemôže spôsobiť skrat.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -93,7 +94,8 @@ public class LedBar8 extends GateSymbol {
 
     @Override
     public void simulate() {
-        if (isLow(pinIW_)) {
+        // latch pri aktívnom IW_ (cyklus OUT); ak IW_ nie je zapojené, LED priamo zobrazujú vstup
+        if (isLow(pinIW_) || !pinIW_.isConnected()) {
             int value = readData();
             if (value != latchedValue) {
                 latchedValue = value;
@@ -152,6 +154,6 @@ public class LedBar8 extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "8 LED výstup pre OUT - dáta zachytí pri aktívnom IW_";
+        return "8 LED výstup pre OUT - dáta zachytí pri aktívnom IW_, bez IW_ zobrazuje priamo vstup";
     }
 }
