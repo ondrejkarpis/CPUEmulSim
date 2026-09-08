@@ -24,7 +24,7 @@ Riadiace signály CPU sú aktívne na **nízkej úrovni** (`0` = aktívny signá
 | Súčiastka | Piny | Pripojenie |
 |-----------|------|------------|
 | `Ram256`  | `MR_`, `MW_`, `A7..A0` (vľavo), `D7..D0` (vpravo) | čítanie pri `MR_=0`, zápis pri `MW_=0`; adresa z `A7..A0`, dáta na `D7..D0` |
-| `LedBar8` | `D7..D0`, `IW_` | odchytí hodnotu dátovej zbernice pri `IW_=0` a zobrazí ju na LED diódach |
+| `Led`     | `IN` (vľavo) | svieti pri logickej 1 na vstupe; pasívna, vhodná na zobrazenie zbernice aj riadiacich signálov |
 | `Switches8` | `D7..D0`, `IR_` | smeruje stav 8 prepínačov na dátovú zbernicu pri `IR_=0` (inak high-impedance) |
 
 Zbernice v schéme:
