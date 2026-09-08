@@ -60,6 +60,9 @@ public class AddressBus16 extends BusSymbol {
 
     private static final Color RAIL_COLOR = Color.DARKSLATEBLUE;
 
+    /** Hrúbka čiary relatívne k bunke (vodič má ~6 px, lišta teda o málo hrubšia). */
+    private static final double RAIL_THICKNESS = 0.45;
+
     private int rows = DEFAULT_ROWS;
 
     private Pane railPane;
@@ -112,16 +115,19 @@ public class AddressBus16 extends BusSymbol {
 
     private void initRail() {
         int cell = getSheet().getGrid().getSizeMin();
+        double railCenterX = RAIL_WIDTH * cell / 2.0;
+        double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
-        line = new Rectangle(RAIL_WIDTH * cell, rows * cell, RAIL_COLOR);
+        line = new Rectangle(railCenterX - thickness / 2.0, 0, thickness, rows * cell);
+        line.setFill(RAIL_COLOR);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(1);
         line.addEventHandler(MouseEvent.MOUSE_CLICKED, this::handleRailClick);
         line.addEventHandler(MouseEvent.MOUSE_RELEASED, this::handleRailRelease);
 
-        resizeHandle = new Circle(RAIL_WIDTH * cell / 2.0, rows * cell, cell * 0.35, Color.GRAY);
-        resizeHandle.setStroke(Color.DARKGRAY);
-        resizeHandle.setStrokeWidth(1);
+        // neviditeľný rukoväť na zmenu dĺžky - cítiť ho je len kurzorom, samotný nie je vidieť
+        resizeHandle = new Circle(railCenterX, rows * cell, cell * 0.35, Color.TRANSPARENT);
+        resizeHandle.setStroke(Color.TRANSPARENT);
         resizeHandle.setCursor(Cursor.N_RESIZE);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleResizeDragged);
