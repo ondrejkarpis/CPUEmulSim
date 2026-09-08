@@ -77,6 +77,7 @@ public class Switch extends GateSymbol {
         valueText.setTextOrigin(VPos.CENTER);
         valueText.setLayoutY(h / 2.0);
         valueText.setFont(Font.font(cell * 0.6));
+        valueText.setMouseTransparent(true);
         valueText.setLayoutX(w / 2.0 - valueText.getBoundsInLocal().getWidth() / 2.0);
 
         return new Pane(button, valueText);
