@@ -16,10 +16,11 @@ import java.util.List;
 
 /**
  * 8-bitový výstupný zobrazovač (8 LED) pre inštrukciu {@code OUT}.
- * Vstupné dáta zachytí do latche v okamihu, keď je riadiaci signál {@code IW_} aktívny (log. 0).
- * Ak {@code IW_} nie je zapojený (samostatné použitie), LED priamo odzrkadľujú aktuálnu
- * hodnotu na vstupe. LED sú čisto pasívne - zariadenie nemá žiadne výstupné vývody,
- * nikdy nehynie na zbernicu, a preto nemôže spôsobiť skrat.
+ * Stav každej LED závisí IBA od stavu príslušného vstupného pinu D0..D7 - LED vždy priamo
+ * odzrkadľujú aktuálnu hodnotu na vstupe, bez ohľadu na riadiaci signál {@code IW_}.
+ * Pri inštrukcii OUT na zbernici DataBus8 rozvádza hodnotu na vstupy LED práve počas
+ * aktívneho {@code IW_}; samotné LED žiadny latch nemajú. LED sú čisto pasívne - zariadenie
+ * nemá žiadne výstupné vývody, nikdy nehynie na zbernicu, a preto nemôže spôsobiť skrat.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -34,7 +35,7 @@ public class LedBar8 extends GateSymbol {
     private Pin[] dataPins;
     private Pin pinIW_;
 
-    private int latchedValue = 0;
+    private int currentValue = 0;
     private Circle[] leds;
     private Text valueLabel;
 
@@ -94,13 +95,11 @@ public class LedBar8 extends GateSymbol {
 
     @Override
     public void simulate() {
-        // latch pri aktívnom IW_ (cyklus OUT); ak IW_ nie je zapojené, LED priamo zobrazujú vstup
-        if (isLow(pinIW_) || !pinIW_.isConnected()) {
-            int value = readData();
-            if (value != latchedValue) {
-                latchedValue = value;
-                refreshVisual();
-            }
+        // LED vždy priamo zrkadlia stav vstupných pinov, bez ohľadu na stav IW_
+        int value = readData();
+        if (value != currentValue) {
+            currentValue = value;
+            refreshVisual();
         }
     }
 
@@ -125,16 +124,16 @@ public class LedBar8 extends GateSymbol {
         if (leds == null) return;
         Platform.runLater(() -> {
             for (int index = 0; index < 8; index++) {
-                leds[index].setFill(((latchedValue & (1 << index)) != 0) ? LED_ON : LED_OFF);
+                leds[index].setFill(((currentValue & (1 << index)) != 0) ? LED_ON : LED_OFF);
             }
             if (valueLabel != null) {
-                valueLabel.setText(String.format("0x%02X", latchedValue));
+                valueLabel.setText(String.format("0x%02X", currentValue));
             }
         });
     }
 
-    public int getLatchedValue() {
-        return latchedValue;
+    public int getCurrentValue() {
+        return currentValue;
     }
 
     @Override
@@ -154,6 +153,6 @@ public class LedBar8 extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "8 LED výstup pre OUT - dáta zachytí pri aktívnom IW_, bez IW_ zobrazuje priamo vstup";
+        return "8 LED výstup pre OUT - LED vždy zobrazujú stav svojho pinu, IW_ nič nehradí";
     }
 }
