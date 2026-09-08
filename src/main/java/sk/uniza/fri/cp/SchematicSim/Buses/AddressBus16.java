@@ -2,7 +2,6 @@ package sk.uniza.fri.cp.SchematicSim.Buses;
 
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
-import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.RadioMenuItem;
@@ -99,7 +98,7 @@ public class AddressBus16 extends BusSymbol {
 
     @Override
     protected String getBusLabel() {
-        return "ADRESNÁ 16";
+        return "AB";
     }
 
     @Override
@@ -134,16 +133,13 @@ public class AddressBus16 extends BusSymbol {
         resizeHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
 
         Text title = new Text(getBusLabel());
-        title.setLayoutX(cell * 0.3);
-        title.setLayoutY(cell * 0.8);
-        title.setFont(Font.font(cell * 0.55));
+        title.setLayoutX(railCenterX - cell * 0.55);
+        title.setLayoutY(-cell * 0.15);
+        title.setFont(Font.font(cell * 0.6));
         title.setFill(RAIL_COLOR);
         title.setMouseTransparent(true);
 
         railPane.getChildren().addAll(line, title, resizeHandle);
-
-        // východiskový vývod AB0, aby zbernica nebola po umiestnení úplne prázdna
-        createTap(0, cell * 2.0);
     }
 
     /**
@@ -168,7 +164,8 @@ public class AddressBus16 extends BusSymbol {
         Circle dot = new Circle(x, y, cell * 0.28, Color.GRAY);
         dot.setStroke(Color.BLACK);
         dot.setStrokeWidth(1);
-        dot.setCursor(Cursor.HAND);
+        // dot je len vizuálny - myš ide skrz na pin, aby ťahaním z vývodu vzniklo spojenie
+        dot.setMouseTransparent(true);
 
         Text label = new Text("AB" + bit);
         label.setLayoutX(x + cell * 0.6);
@@ -182,8 +179,12 @@ public class AddressBus16 extends BusSymbol {
         taps.add(tap);
         pinsRef.add(pin);
 
-        dot.addEventHandler(MouseEvent.MOUSE_PRESSED, e ->
-                openSignalMenu(newBit -> changeTapBit(tap, newBit), bit, e.getScreenX(), e.getScreenY()));
+        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje
+        pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.getButton() == MouseButton.SECONDARY) {
+                openSignalMenu(newBit -> changeTapBit(tap, newBit), bit, e.getScreenX(), e.getScreenY());
+            }
+        });
 
         driveTap(tap);
         return pin;
@@ -231,9 +232,8 @@ public class AddressBus16 extends BusSymbol {
         if (creating.areBothEndsConnected()) return;
 
         final double localY = toLocalY(event);
-        final Point2D dropSheet = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-        final double pinSheetX = getLayoutX() + RAIL_WIDTH * getSheet().getGrid().getSizeMin() / 2.0;
-        final boolean leftWired = dropSheet.getX() < pinSheetX;
+        double thickness = Math.max(4, getSheet().getGrid().getSizeMin() * RAIL_THICKNESS);
+        final boolean leftWired = event.getX() < thickness / 2.0;
 
         openSignalMenu(bit -> {
             Pin tapPin = createTap(bit, localY);
@@ -328,8 +328,9 @@ public class AddressBus16 extends BusSymbol {
     // === pomocné ===
 
     private double toLocalY(MouseEvent event) {
-        Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-        return sheetXY.getY() - getLayoutY();
+        // lišta aj rukoväť majú lokálny počiatok v ľavom hornom rohu súčiastky,
+        // takže getY() udalosti je priamo súradnica v lokálnom priestore súčiastky
+        return event.getY();
     }
 
     private static double clamp(double value, double min, double max) {
