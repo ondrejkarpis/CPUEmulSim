@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.geometry.VPos;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -64,12 +65,22 @@ public class Switch extends GateSymbol {
         button.setStroke(Color.BLACK);
         button.setStrokeWidth(1.5);
         button.setOnMouseClicked(event -> {
-            if (event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+            if (event.getButton() == MouseButton.PRIMARY) {
                 handleToggle();
             }
         });
+        // menu sa otvára na pravom tlačidle myši; MOUSE_PRESSED je spoľahlivejší ako
+        // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
+        button.setOnMousePressed(event -> {
+            if (event.getButton() == MouseButton.SECONDARY) {
+                showPlacementMenu(event.getScreenX(), event.getScreenY());
+                event.consume();
+            }
+        });
         button.setOnContextMenuRequested(event -> {
-            showPlacementMenu(event.getScreenX(), event.getScreenY());
+            if (contextMenu == null || !contextMenu.isShowing()) {
+                showPlacementMenu(event.getScreenX(), event.getScreenY());
+            }
             event.consume();
         });
 
@@ -182,6 +193,10 @@ public class Switch extends GateSymbol {
 
     public boolean isOn() {
         return on;
+    }
+
+    public boolean isContextMenuShowing() {
+        return contextMenu != null && contextMenu.isShowing();
     }
 
     @Override

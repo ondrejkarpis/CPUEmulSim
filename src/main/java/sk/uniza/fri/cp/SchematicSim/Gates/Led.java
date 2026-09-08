@@ -6,6 +6,7 @@ import javafx.scene.control.Menu;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
@@ -76,8 +77,18 @@ public class Led extends GateSymbol {
         light = new Circle(w / 2.0, h / 2.0, cell * 0.55, LED_OFF);
         light.setStroke(Color.BLACK);
         light.setStrokeWidth(1.5);
+        // menu sa otvára na pravom tlačidle myši; MOUSE_PRESSED je spoľahlivejší ako
+        // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
+        light.setOnMousePressed(event -> {
+            if (event.getButton() == MouseButton.SECONDARY) {
+                showMenu(event.getScreenX(), event.getScreenY());
+                event.consume();
+            }
+        });
         light.setOnContextMenuRequested(event -> {
-            showMenu(event.getScreenX(), event.getScreenY());
+            if (contextMenu == null || !contextMenu.isShowing()) {
+                showMenu(event.getScreenX(), event.getScreenY());
+            }
             event.consume();
         });
 
@@ -95,14 +106,16 @@ public class Led extends GateSymbol {
 
             Menu colorMenu = new Menu("Farba LED");
             ToggleGroup colorGroup = new ToggleGroup();
+            RadioMenuItem firstColor = null;
             for (Map.Entry<String, Color> entry : LED_COLORS.entrySet()) {
                 RadioMenuItem item = new RadioMenuItem(entry.getKey());
                 item.setToggleGroup(colorGroup);
                 item.setUserData(entry.getValue());
                 item.setOnAction(e -> setColor((Color) item.getUserData()));
                 colorMenu.getItems().add(item);
+                if (firstColor == null) firstColor = item;
             }
-            colorMenu.getItems().get(0).setSelected(true);
+            if (firstColor != null) firstColor.setSelected(true);
 
             contextMenu = new ContextMenu(placement, new SeparatorMenuItem(), colorMenu);
         }
@@ -183,6 +196,10 @@ public class Led extends GateSymbol {
 
     public boolean isLit() {
         return on;
+    }
+
+    public boolean isContextMenuShowing() {
+        return contextMenu != null && contextMenu.isShowing();
     }
 
     public Color getLedColor() {
