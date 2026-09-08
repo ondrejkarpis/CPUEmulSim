@@ -80,13 +80,38 @@ public abstract class Pin extends Group implements Connectable {
         if (!event.isPrimaryButtonDown()) return;
         startFullDrag();
 
-        creatingWire = new Wire(this);
-        creatingWire.setMouseTransparent(true);
-        creatingWire.setOpacity(0.5);
-        owner.getSheet().addItem(creatingWire);
+        beginWireCreation(this);
 
         event.consume();
     };
+
+    /**
+     * Založenie rozpracovaného vodiča z daného pinu (bez natívneho drag gesta - používa to
+     * samotný {@link #onMouseDragDetected} aj testy zbernicovej lišty). Vodič sa zaregistruje
+     * ako aktuálny rozpracovaný ({@link #getInProgressWire()}) a pridá na plochu.
+     */
+    public static Wire beginWireCreation(Pin source) {
+        creatingWire = new Wire(source);
+        creatingWire.setMouseTransparent(true);
+        creatingWire.setOpacity(0.5);
+        source.owner.getSheet().addItem(creatingWire);
+        return creatingWire;
+    }
+
+    /**
+     * Rozpracovaný vodič, ktorý sa práve ťahá z nejakého pinu. Prístup pre komponenty,
+     * ktoré odchyťujú ukončenie ťahania mimo pin (napr. zbernicová lišta).
+     */
+    public static Wire getInProgressWire() {
+        return creatingWire;
+    }
+
+    /**
+     * Uvoľnenie rozpracovaného vodiča bez pripojenia (po odmietnutí/odovzdaní na iný komponent).
+     */
+    public static void finishInProgressWire() {
+        creatingWire = null;
+    }
 
     private final EventHandler<MouseDragEvent> onMouseDragReleased = event -> {
         if (creatingWire != null) {

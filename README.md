@@ -28,7 +28,7 @@ Riadiace signály CPU sú aktívne na **nízkej úrovni** (`0` = aktívny signá
 | `Switch`  | `O` (štandardne vpravo) | klikom prepni; logická hodnota (1/0) sa zobrazuje vnútri kruhu; pravým tlačidlom vyber umiestnenie vývodu (vpravo/vľavo/hore/dole) |
 
 Zbernice v schéme:
-- **Adresná** — `A15..A0` (16-bit).
+- **Adresná** (`AddressBus16`, vývody `AB0..AB15`) — hrubá zvislá čiara; ľavým kliknutím na čiaru sa otvorí menu výberu vývodu, natiahnutie vodiča na čiaru otvorí to isté menu, dĺžku čiary meníš potiahnutím spodného konca, z jedného signálu môžeš vyviesť viac rovnakých vývodov.
 - **Dátová** — `D7..D0`.
 - **Riadiace signály** — `MW_`, `MR_`, `IW_`, `IR_`, `IA_`, `RY`, `IT`.
 
