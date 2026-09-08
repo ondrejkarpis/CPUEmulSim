@@ -1,11 +1,14 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.geometry.VPos;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -15,10 +18,11 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Samostatný prepínač - farebný kruh s jedným prípojným bodom {@code O}. Kliknutím na kruh
- * sa stav prepne (červený = zapnutý, bielosivý = vypnutý). Pravým tlačidlom myši sa otvorí
- * kontextové menu na výber umiestnenia vývodu (vpravo/vľavo/hore/dole); štandardne je vývod
- * vpravo. Vývod {@code O} trvalo generuje HIGH pre zapnutý prepínač a LOW pre vypnutý.
+ * Samostatný prepínač - biely kruh s jedným prípojným bodom {@code O}. Kliknutím na kruh
+ * sa stav prepne a vnútri kruhu sa zobrazí logická hodnota vývodu (1 = HIGH, 0 = LOW).
+ * Pravým tlačidlom myši sa otvorí kontextové menu na výber umiestnenia vývodu
+ * (vpravo/vľavo/hore/dole); štandardne je vývod vpravo. Vývod {@code O} trvalo generuje
+ * HIGH pre zapnutý prepínač a LOW pre vypnutý.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -27,11 +31,9 @@ public class Switch extends GateSymbol {
     private static final int GRID_WIDTH = 2;
     private static final int GRID_HEIGHT = 2;
 
-    private static final Color SWITCH_ON = Color.RED;
-    private static final Color SWITCH_OFF = Color.WHITESMOKE;
-
     private Pin outPin;
     private Circle button;
+    private Text valueText;
     private ContextMenu contextMenu;
 
     private volatile boolean on = false;
@@ -58,7 +60,7 @@ public class Switch extends GateSymbol {
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
-        button = new Circle(w / 2.0, h / 2.0, cell * 0.55, SWITCH_OFF);
+        button = new Circle(w / 2.0, h / 2.0, cell * 0.55, Color.WHITE);
         button.setStroke(Color.BLACK);
         button.setStrokeWidth(1.5);
         button.setOnMouseClicked(event -> {
@@ -71,7 +73,13 @@ public class Switch extends GateSymbol {
             event.consume();
         });
 
-        return new Pane(button);
+        valueText = new Text("0");
+        valueText.setTextOrigin(VPos.CENTER);
+        valueText.setLayoutY(h / 2.0);
+        valueText.setFont(Font.font(cell * 0.6));
+        valueText.setLayoutX(w / 2.0 - valueText.getBoundsInLocal().getWidth() / 2.0);
+
+        return new Pane(button, valueText);
     }
 
     private void showPlacementMenu(double screenX, double screenY) {
@@ -157,12 +165,18 @@ public class Switch extends GateSymbol {
     private volatile boolean visualUpdateScheduled;
 
     private void refreshVisual() {
-        if (button == null || visualUpdateScheduled) return;
+        if (button == null || valueText == null || visualUpdateScheduled) return;
         visualUpdateScheduled = true;
         Platform.runLater(() -> {
             visualUpdateScheduled = false;
-            button.setFill(on ? SWITCH_ON : SWITCH_OFF);
+            String text = on ? "1" : "0";
+            valueText.setText(text);
+            valueText.setLayoutX(wCenter() - valueText.getBoundsInLocal().getWidth() / 2.0);
         });
+    }
+
+    private double wCenter() {
+        return getSheet().getGrid().getSizeMin() * getGridWidth() / 2.0;
     }
 
     public boolean isOn() {
