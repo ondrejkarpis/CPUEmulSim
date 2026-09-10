@@ -253,7 +253,7 @@ public class CPU extends Thread {
     public void continueExecute(){
         if(this.f_pause) {
             f_pause = false;
-            cdlHalt.countDown();
+            if (cdlHalt != null) cdlHalt.countDown();
         }
 	}
 
@@ -262,7 +262,7 @@ public class CPU extends Thread {
      */
     public void step(){
         f_pause = true; //pri krokovani zastavit pred vykonanim dalsej inst.
-        cdlHalt.countDown();
+        if (cdlHalt != null) cdlHalt.countDown();
     }
 
     /**
@@ -979,6 +979,7 @@ public class CPU extends Thread {
         //cakanie na nastavenie dat na datovej zbernici
         //updateMessage("Cakanie na nastavenie dat");
         this.waitForSteadySimulation(inst, true);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //nacitaj data
         microstepAwait("Nacitanie dat");
@@ -1028,6 +1029,7 @@ public class CPU extends Thread {
 
         //updateMessage("Cakanie na nastavenie dat");
         this.waitForSteadySimulation(inst, true);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //zrusenie priznaku
         microstepAwait("Zrusenie priznaku ZAPISU");
@@ -1038,6 +1040,7 @@ public class CPU extends Thread {
 
         //cakanie, aby sa nezapisali nespravne data
         this.waitForSteadySimulation(inst, false);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //zrusenie dat
         microstepAwait("Zrusenie dat");

@@ -210,9 +210,9 @@ public class DataBus8 extends BusSymbol {
     private void driveTap(TapPoint tap) {
         if (write) {
             boolean high = (data & (1 << tap.bit)) != 0;
-            setPinForce(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         } else {
-            setPinForce(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+            setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
         }
         scheduleTapVisuals();
     }
@@ -399,7 +399,7 @@ public class DataBus8 extends BusSymbol {
             write = false;
             Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
-                setPinForce(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
         }
 
@@ -409,13 +409,13 @@ public class DataBus8 extends BusSymbol {
             read = true;
             Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
-                setPinForce(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
         } else if (!readActive && read) {
             read = false;
             Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
-                setPinForce(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
         }
     }
@@ -438,10 +438,8 @@ public class DataBus8 extends BusSymbol {
     @Override
     public void simulate() {
         if (read) {
-            Bus.getBus().dataIsChanging();
             readPinsIntoBus();
         } else if (write) {
-            Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
                 driveTap(tap);
             }

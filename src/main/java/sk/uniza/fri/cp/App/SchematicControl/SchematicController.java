@@ -1,5 +1,6 @@
 package sk.uniza.fri.cp.App.SchematicControl;
 
+import javafx.application.Platform;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -113,9 +114,11 @@ public class SchematicController {
         this.root.setBottom(buildStatusBar());
 
         //manuálny spínač napájania - reflektuje aj automatické zapnutie/vypnutie simulácie
+        //vlastnosť sa mení na simulačnom vlákne -> UI sa musí aktualizovať na FX vlákne,
+        //inak by IllegalStateException zabilo celý simulačný task (a CPU by viselo na zbernici)
         this.sheet.simRunningProperty().addListener((obs, oldValue, newValue) -> {
-            if (newValue != this.tsPower.isSelected()) this.tsPower.setSelected(newValue);
-            this.lbStatus.setText(newValue ? "Simulácia beží" : "Simulácia zastavená");
+            if (Platform.isFxApplicationThread()) updateSimulationControls(newValue);
+            else Platform.runLater(() -> updateSimulationControls(newValue));
         });
         this.tsPower.selectedProperty().addListener((obs, oldValue, newValue) -> {
             if (newValue) this.sheet.powerOn();
@@ -123,10 +126,20 @@ public class SchematicController {
         });
 
         //tlačidlá behu CPU sledujú stav CPU (enabled/disabled)
-        this.cpuController.cpuStateProperty().addListener((obs, oldValue, newValue) -> setButtons(newValue));
+        //vlastnosť sa mení na vlákne CPU -> tlačidlá sa musia meniť na FX vlákne,
+        //inak by IllegalStateException zabilo celé vlákno CPU
+        this.cpuController.cpuStateProperty().addListener((obs, oldValue, newValue) -> {
+            if (Platform.isFxApplicationThread()) setButtons(newValue);
+            else Platform.runLater(() -> setButtons(newValue));
+        });
         setButtons(CPUStates.Idle);
 
         bindCpuButtons();
+    }
+
+    private void updateSimulationControls(boolean running) {
+        if (running != this.tsPower.isSelected()) this.tsPower.setSelected(running);
+        this.lbStatus.setText(running ? "Simulácia beží" : "Simulácia zastavená");
     }
 
     /**

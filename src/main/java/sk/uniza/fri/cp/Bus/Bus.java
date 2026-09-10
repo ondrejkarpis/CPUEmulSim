@@ -140,28 +140,83 @@ public class Bus{
 	}
 
     /**
-     * Pasívne čakanie na ustálenie simulácie,
-     * maximálne však 5 sekund v prípade, ak je pripojený k simulátoru a simulácia beží. Ak nebeží, nečaká.
+     * Pasívne čakanie na ustálenie simulácie. Čaká, kým simulačné vlákno neoznámi,
+     * že nie je činné (prázdny front udalostí spracovaný, nič mu nezostalo),
+     * prípadne 30 s bez života simulácie - vtedy berie simuláciu ako zlyhanú.
      *
-     * @return True ak prišiel v časovom úseku oznam o nastavení dát, false inak.
+     * @return True ak je simulácia ustálená, false inak (simulácia nebeží alebo je zaseknutá).
      */
     public boolean waitForSteadyState() {
         if (Thread.currentThread().getName().equalsIgnoreCase("SimulationThread")) return true;
 
-        if (isSimulationRunning) {
-            while (true) {
+        long waitStart = System.currentTimeMillis();
+        synchronized (steadyMonitor) {
+            while (isSimulationRunning) {
+                // ustálené = front udalostí je prázdny A simulácia nie je práve v činnosti
+                // (čaká na take() - nemá čo spracúvať). Toto platí aj pre zápis CPU, ktorý
+                // vyrobil nula udalostí (vývody už v želanom stave) - predtým na ňom
+                // starý semafor (odčerpané povolenia) naveky visel.
+                if (queue.size() == 0 && simulationIdle) return true;
+
+                // simulácia stále spracúva zvyšok udalostí - počkáme si na jej signál
+                if (!simulationAlive()) {
+                    reportSteadyFailure("simulacia mŕtva/ticho príliš dlho",
+                            System.currentTimeMillis() - waitStart, queue.size());
+                    return false;
+                }
+
                 try {
-                    //TODO korekcia ak semafor vrati false, aj metoda ma vratit false
-                    if (!(!dataSemaphore.tryAcquire(5, TimeUnit.SECONDS) || queue.size() != 0)) break;
+                    steadyMonitor.wait(100);
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     return false;
                 }
             }
-            return true;
-        } else {
+            reportSteadyFailure("simulacia nebezi", 0, -1);
             return false;
         }
+    }
 
+    /** Bezpečnostná poistka: ak simulačné vlákno neprešlo slučkou viac ako 30 s, berieme ho ako mŕtve. */
+    private boolean simulationAlive() {
+        long heartbeat = this.simLoopHeartbeatMs;
+        return heartbeat == 0 || (System.currentTimeMillis() - heartbeat) < 30000;
+    }
+
+    private long lastSteadyDiagPrint = 0;
+    /** Heartbeat simulácie - čas (ms) posledného prechodu simulačnou slučkou (na diagnostiku). */
+    private volatile long simLoopHeartbeatMs = 0;
+
+    public void reportSimLoopActivity() {
+        this.simLoopHeartbeatMs = System.currentTimeMillis();
+    }
+
+    private long simIdleMs() {
+        long pulse = this.simLoopHeartbeatMs;
+        return pulse == 0 ? -1 : System.currentTimeMillis() - pulse;
+    }
+
+    private void reportSteadyFailure(String reason, long waitedMs, int queueSize) {
+        // diagnostika - najviac 1x za 2 s, aby nezahlcoval konzolu
+        long now = System.currentTimeMillis();
+        if (now - lastSteadyDiagPrint > 2000) {
+            lastSteadyDiagPrint = now;
+            System.err.println("[Bus] waitForSteadyState=false (" + reason
+                    + " | cakal ms: " + waitedMs
+                    + " | fronte: " + queueSize
+                    + " | voľné permity: " + dataSemaphore.availablePermits()
+                    + " | simulationIsRunning=" + isSimulationRunning
+                    + " | sim slucka nebezi uz ms: " + simIdleMs() + ")");
+            // výpis stacktrace vlákna simulácie - ukáže, kde je zaseknuté
+            for (Thread t : Thread.getAllStackTraces().keySet()) {
+                if ("SchematicSimulationThread".equals(t.getName())) {
+                    System.err.println("[Bus] StackTrace vlákna simulácie:");
+                    for (StackTraceElement el : t.getStackTrace()) {
+                        System.err.println("    at " + el);
+                    }
+                }
+            }
+        }
     }
 
     private LinkedBlockingQueue<?> queue;
@@ -170,19 +225,43 @@ public class Bus{
         this.queue = queue;
     }
 
+    private final Object steadyMonitor = new Object();
+
+    /** Pravda = simulačné vlákno nemá žiadnu nedokončenú prácu (čaká na take(), front je prázdny). */
+    private volatile boolean simulationIdle;
+
     /**
      * Oznámevnie zbernici, že dáta boli ustálené a je možné ich čítať.
+     * Volá simulačné vlákno, keď vyprázdnilo front a ide si sadnúť na čakanie.
      */
     public void dataInSteadyState() {
-        dataSemaphore.release(20);
+        synchronized (steadyMonitor) {
+            simulationIdle = true;
+            steadyMonitor.notifyAll();
+        }
+    }
+
+    /**
+     * Oznam simulácie, že začína spracúvať udalosť - simulácia nie je ustálená,
+     * CPU musí počkať. Volá simulačné vlákno pred každým spracovaním udalosti.
+     */
+    public void simulationProcessingStarts() {
+        synchronized (steadyMonitor) {
+            simulationIdle = false;
+        }
     }
 
     /**
      * Oznámevnie zbernici, že prebiehajú zmeny, ktoré môžu ovplyvniť dáta na dátovej zbernici a nie je teda bezpečné
      * z nej čítať.
+     * <p>
+     * Zámerne nevykonáva nič kritické: volá sa z CPU (DataBus8.handleControlChange) počas zápisov,
+     * kedy by zneplatnenie nečinnosti simulácie spôsobilo nekončiace čakanie pri zápisoch s nulovými
+     * udalosťami (vývody už v želanom stave). Či je simulácia ustálená, oznamuje samotné simulačné
+     * vlákno cez {@link #dataInSteadyState()}/{@link #simulationProcessingStarts()}.
      */
     public void dataIsChanging() {
-        dataSemaphore.drainPermits();
+        // zámerne prázdna metóda - pozri poznámku vyššie
     }
 
     /**

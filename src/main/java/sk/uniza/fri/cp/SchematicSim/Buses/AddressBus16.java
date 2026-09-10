@@ -199,7 +199,7 @@ public class AddressBus16 extends BusSymbol {
     private void driveTap(TapPoint tap) {
         int address = Short.toUnsignedInt(getBus().getAddressBus());
         boolean high = (address & (1 << tap.bit)) != 0;
-        setPinForce(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         scheduleTapVisuals();
     }
 

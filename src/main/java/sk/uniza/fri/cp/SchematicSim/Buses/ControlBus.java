@@ -66,7 +66,7 @@ public class ControlBus extends BusSymbol {
         for (int index = 0; index < controlPins.length; index++) {
             if (INPUT_PIN[index]) continue; // vstupné signály sa nenastavujú zo zbernice
             boolean high = (ctrl & (1 << BIT_OF_PIN[index])) != 0;
-            setPinForce(controlPins[index], high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            setPin(controlPins[index], high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         }
     }
 

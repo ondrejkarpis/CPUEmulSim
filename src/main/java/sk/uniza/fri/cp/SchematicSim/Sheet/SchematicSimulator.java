@@ -40,81 +40,118 @@ public class SchematicSimulator {
                 protected Void call() throws Exception {
                     Thread.currentThread().setName("SchematicSimulationThread");
 
-                    running.setValue(true);
+                    // celý beh simulácie je v try/finally - pri akejkoľvek chybe alebo rušení
+                    // sa musí vždy odpojiť od zbernice, inak by CPU navždy čakalo na ustálenie
+                    // dát (isSimulationRunning by ostalo true a waitForSteadyState by sa zacyklilo)
+                    try {
+                        setRunningQuietly(true);
 
-                    // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
-                    Bus.getBus().setEventsQueue(eventsQueue);
-                    Bus.getBus().simulationIsRunning(true);
-                    Bus.getBus().dataIsChanging();
+                        // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
+                        Bus.getBus().setEventsQueue(eventsQueue);
+                        Bus.getBus().simulationIsRunning(true);
+                        Bus.getBus().simulationProcessingStarts(); // ešte nie je idle - počiatočné spracovanie
 
-                    // počiatočné vyhodnotenie - nahrádza powerSockets.forEach(PowerSocket::powerUp)
-                    allGates.forEach(GateSymbol::reset);
-                    allGates.forEach(GateSymbol::simulate);
+                        // počiatočné vyhodnotenie - nahrádza powerSockets.forEach(PowerSocket::powerUp)
+                        allGates.forEach(GateSymbol::reset);
+                        allGates.forEach(GateSymbol::simulate);
 
-                    // obnova hodnôt na zberniciach na vývody (pre prípad opätovného zapnutia simulácie)
-                    for (GateSymbol gate : allGates) {
-                        if (gate instanceof BusSymbol) ((BusSymbol) gate).syncFromBus();
-                    }
+                        // obnova hodnôt na zberniciach na vývody (pre prípad opätovného zapnutia simulácie)
+                        for (GateSymbol gate : allGates) {
+                            if (gate instanceof BusSymbol) ((BusSymbol) gate).syncFromBus();
+                        }
 
-                    HashSet<GateSymbol> gatesToUpdate = new HashSet<>();
-                    SheetEvent event;
-                    long lastActivityTime = System.currentTimeMillis();
-                    boolean steadyState = false;
+                        HashSet<GateSymbol> gatesToUpdate = new HashSet<>();
+                        SheetEvent event;
+                        long lastActivityTime = System.currentTimeMillis();
+                        boolean steadyState = false;
 
-                    while (!isCancelled()) {
-                        try {
-                            event = eventsQueue.poll();
-                            if (event == null) {
-                                if (eventsQueue.size() > 0) {
-                                    event = eventsQueue.take();
-                                } else {
-                                    // simulácia je ustálená - CPU môže bezpečne čítať dáta zo zbernice
-                                    Bus.getBus().dataInSteadyState();
-                                    steadyState = true;
-                                    event = eventsQueue.take();
-                                    lastActivityTime = System.currentTimeMillis();
+                        while (!isCancelled()) {
+                            try {
+                                // heart-beat pre diagnostiku - Bus vie povedať, či simulačná slučka
+                                // počas čakania CPU na ustálenie naozaj bežala, alebo bola zablokovaná
+                                Bus.getBus().reportSimLoopActivity();
+
+                                event = eventsQueue.poll();
+                                if (event == null) {
+                                    if (eventsQueue.size() > 0) {
+                                        event = eventsQueue.take();
+                                    } else {
+                                        // simulácia je ustálená - CPU môže bezpečne čítať dáta zo zbernice
+                                        Bus.getBus().dataInSteadyState();
+                                        steadyState = true;
+                                        event = eventsQueue.take();
+                                        lastActivityTime = System.currentTimeMillis();
+                                    }
                                 }
-                            }
 
-                            if (System.currentTimeMillis() - lastActivityTime > ASYNCH_TIMEOUT_MS) {
-                                Platform.runLater(() -> {
-                                    Alert alert = new Alert(Alert.AlertType.ERROR,
-                                            "Chyba simulácie. Príliš dlhá odozva.", ButtonType.CLOSE);
-                                    alert.show();
-                                });
-                                this.cancel();
-                                break;
-                            }
+                                if (System.currentTimeMillis() - lastActivityTime > ASYNCH_TIMEOUT_MS) {
+                                    // kľud v simulácii (CPU načúva, nič sa nemení) je NORMÁLNY stav -
+                                    // watchdog ruší simuláciu iba pri skutočnom zablokovaní (plný front),
+                                    // inak by pri dlhšej pauze (krokovanie, zastavený program) zabil živú
+                                    // simuláciu a CPU by začalo hlásiť chybu zbernice
+                                    if (eventsQueue.size() > 0) {
+                                        System.err.println("[Sim] RUŠÍM simuláciu - príliš dlhá odozva "
+                                                + "(posledná aktivita pred " + (System.currentTimeMillis() - lastActivityTime)
+                                                + " ms, front má " + eventsQueue.size() + " udalostí)");
+                                        Platform.runLater(() -> {
+                                            Alert alert = new Alert(Alert.AlertType.ERROR,
+                                                    "Chyba simulácie. Príliš dlhá odozva.", ButtonType.CLOSE);
+                                            alert.show();
+                                        });
+                                        this.cancel();
+                                        break;
+                                    } else {
+                                        lastActivityTime = System.currentTimeMillis();
+                                    }
+                                }
 
-                            if (steadyState) {
+if (steadyState) {
                                 // podujatie sa našlo - dáta sa menia, CPU nesmie čítať
-                                Bus.getBus().dataIsChanging();
+                                // a hlavne: zneplatnime príznak idle, aby CPU neakceptovalo
+                                // príliš skoré ustálenie (napr. pri burstovom fronte)
+                                Bus.getBus().simulationProcessingStarts();
                                 steadyState = false;
                             }
 
-                            event.process(gatesToUpdate);
+                                event.process(gatesToUpdate);
+                                gatesToUpdate.forEach(GateSymbol::simulate);
+                                gatesToUpdate.clear();
+                                lastActivityTime = System.currentTimeMillis();
+
+                            } catch (InterruptedException e) {
+                                if (isCancelled()) break;
+                            } catch (RuntimeException e) {
+                                // jeden chybny event nesmie zhltit celu simulaciu - inak by CPU
+                                // navzdy cakalo na ustalenie zbernice (isSimulationRunning ostane true)
+                                e.printStackTrace(System.err);
+                                gatesToUpdate.clear();
+                            }
+                        }
+
+                        // zostatok udalosti po rušení - označiť, že simulácia ešte spracúva,
+                        // aby CPU vedelo, že dátová zbernica nie je ustálená
+                        Bus.getBus().simulationProcessingStarts();
+
+                        // zostatok udalosti po rušení - vyhodnot, aby piny nezostali v nekonzistentnom stave
+                        while (!eventsQueue.isEmpty()) {
+                            eventsQueue.take().process(gatesToUpdate);
                             gatesToUpdate.forEach(GateSymbol::simulate);
                             gatesToUpdate.clear();
+                        }
 
-                        } catch (InterruptedException e) {
-                            if (isCancelled()) break;
-                        } catch (NullPointerException e) {
-                            e.printStackTrace(System.err);
-                            gatesToUpdate.clear();
+                        allGates.forEach(GateSymbol::reset);
+                    } catch (Throwable t) {
+                        // zlyhanie simulácie sa nikdy nesmie prehltnúť - vždy je vidieť príčinu
+                        System.err.println("[Sim] Chyba simulácie: " + t);
+                        t.printStackTrace(System.err);
+                    } finally {
+                        System.err.println("[Sim] Koniec simulácie (isCancelled=" + isCancelled() + ")");
+                        try {
+                            setRunningQuietly(false);
+                        } finally {
+                            Bus.getBus().simulationIsRunning(false);
                         }
                     }
-
-                    Bus.getBus().dataIsChanging();
-
-                    while (!eventsQueue.isEmpty()) {
-                        eventsQueue.take().process(gatesToUpdate);
-                        gatesToUpdate.forEach(GateSymbol::simulate);
-                        gatesToUpdate.clear();
-                    }
-
-                    allGates.forEach(GateSymbol::reset);
-                    running.setValue(false);
-                    Bus.getBus().simulationIsRunning(false);
                     return null;
                 }
             };
@@ -151,6 +188,18 @@ public class SchematicSimulator {
             eventsQueue.removeIf(e -> e.getPin() != null && e.getPin().equals(event.getPin()));
             eventsQueue.put(event);
         } catch (InterruptedException ignored) {
+        }
+    }
+
+    /**
+     * Nastavenie vlastnosti behu. Zmena vlastnosti vyvolá listenery - nesmú však zhodiť
+     * cez vlastný RuntimeException celý simulačný task (vlastnosť sa mení na simulačnom vlákne).
+     */
+    private void setRunningQuietly(boolean value) {
+        try {
+            this.running.setValue(value);
+        } catch (RuntimeException ignored) {
+            ignored.printStackTrace(System.err);
         }
     }
 
