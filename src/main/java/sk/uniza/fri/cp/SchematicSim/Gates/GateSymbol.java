@@ -23,7 +23,7 @@ import java.util.Map;
  */
 public abstract class GateSymbol extends Item {
 
-    private final List<Pin> pins;
+    private List<Pin> pins;
 
     /**
      * Bezparametrický konštruktor pre ItemPicker (paletku).
@@ -70,6 +70,15 @@ public abstract class GateSymbol extends Item {
 
     public List<Pin> getPins() {
         return pins;
+    }
+
+    /**
+     * Nahradenie zoznamu pinov súčiastky (dynamická zmena počtu vstupov cez kontextové menu).
+     * Musí byť v súlade s obsahom potomkov (children) - SchemeLoader indexuje piny podľa
+     * tohto zoznamu, a preto poradie (vstupy, výstup) musí zostať stabilné.
+     */
+    protected final void replacePins(List<Pin> pins) {
+        this.pins = pins;
     }
 
     /**

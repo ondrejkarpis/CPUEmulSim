@@ -3,7 +3,8 @@ package sk.uniza.fri.cp.SchematicSim.Gates;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
-import javafx.scene.shape.Polygon;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.Arrays;
 
 /**
- * Abstraktný invertor (NOT). Vykreslený ako klasický trojuholník s negačným krúžkom.
+ * Abstraktný invertor (NOT). Vykreslený ako obdĺžnik s „1" a negačným krúžkom podľa IEC 60617.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -44,17 +45,20 @@ public class NotGate extends GateSymbol {
         double h = getGridHeight() * cell;
         double bubble = cell / 4.0;
 
-        Polygon triangle = new Polygon(0, 0, 0, h, w - 2 * bubble, h / 2.0);
-        triangle.setFill(Color.WHITESMOKE);
-        triangle.setStroke(Color.BLACK);
-        triangle.setStrokeWidth(1.5);
+        Rectangle body = new Rectangle(w - 2 * bubble, h, Color.WHITESMOKE);
+        body.setStroke(Color.BLACK);
+        body.setStrokeWidth(1.5);
+
+        Text label = new Text("1");
+        label.setLayoutX((w - 2 * bubble) / 2 - 4);
+        label.setLayoutY(h / 2 + 5);
 
         Circle negationBubble = new Circle(w - bubble, h / 2.0, bubble);
         negationBubble.setFill(Color.WHITESMOKE);
         negationBubble.setStroke(Color.BLACK);
         negationBubble.setStrokeWidth(1.5);
 
-        return new Pane(triangle, negationBubble);
+        return new Pane(body, label, negationBubble);
     }
 
     @Override
@@ -69,7 +73,7 @@ public class NotGate extends GateSymbol {
 
     @Override
     public int getGridWidth() {
-        return 3;
+        return 2;
     }
 
     @Override
