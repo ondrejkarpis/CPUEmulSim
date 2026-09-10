@@ -8,7 +8,9 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SheetChangeEvent;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Logická súčiastka na schéme. Nahrádza {@code Device}(+{@code Chip}) z BreadboardSim.
@@ -68,6 +70,23 @@ public abstract class GateSymbol extends Item {
 
     public List<Pin> getPins() {
         return pins;
+    }
+
+    /**
+     * Vlastnosti súčiastky pre ukladanie schémy (názov → hodnota). Predvolene prázdne -
+     * konfigurovateľné súčiastky (LED, prepínač, zbernice...) ju prekrývajú. SchemeLoader
+     * ukladá výslednú mapu genericky, takže pridanie novej súčiastky nevyžaduje zmeny v loaderi.
+     */
+    public Map<String, String> saveProperties() {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Obnovenie vlastností súčiastky po načítaní schémy. Volá sa vždy po vytvorení hradla
+     * reflexiou a pred pripájaním vodičov (zbernica si tak najskôr vytvorí svoje odbočky,
+     * aby sa na ne dali pripojiť vodiče podľa indexu pinu). Predvolene no-op.
+     */
+    public void loadProperties(Map<String, String> properties) {
     }
 
     public Point2D getGridPos() {

@@ -27,7 +27,9 @@ import java.util.Map;
 /**
  * Ukladanie / načítanie schémy (súčiastky + vodiče) do XML súboru (.schx).
  * <p>
- * Formát je zámerne jednoduchý - CVO: názov triedy hradla, pozícia na mriežke;
+ * Formát je zámerne jednoduchý - CVO: názov triedy hradla, pozícia na mriežke a generická
+ * mapa vlastností {@code <property name value>}, ktorú si každá súčiastka serializuje sama
+ * (pozri {@link sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol#saveProperties()});
  * vodič: farba, identifikácia koncov (id hradla + index pinu) a pozície zlomov.
  * Hradlá sa vytvárajú reflexiou (musia mať konštruktor {@code (SchematicSheet)}),
  * takže pribúdanie nových súčiastok nevyžaduje zmeny v tomto súbore.
@@ -36,7 +38,7 @@ import java.util.Map;
  */
 public class SchemeLoader {
 
-    private static final String VERSION = "1.0";
+    private static final String VERSION = "2.0";
     private static final String FORGIVEN_ID_PREFIX = "s"; // id pouzite pri nacitani ak chyba ulozene id
 
     private SchemeLoader() {
@@ -72,6 +74,15 @@ public class SchemeLoader {
             Element gridY = new Element("gridY");
             gridY.addContent(Integer.toString(gate.getGridPosY()));
             gateElement.addContent(gridY);
+
+            Element propertiesElement = new Element("properties");
+            for (Map.Entry<String, String> property : gate.saveProperties().entrySet()) {
+                Element propertyElement = new Element("property");
+                propertyElement.setAttribute("name", property.getKey());
+                propertyElement.setAttribute("value", property.getValue());
+                propertiesElement.addContent(propertyElement);
+            }
+            gateElement.addContent(propertiesElement);
 
             gatesElement.addContent(gateElement);
         }
@@ -176,6 +187,8 @@ public class SchemeLoader {
                     gate.moveTo(gridX, gridY);
                     sheet.getOccupancy().occupy(gate);
 
+                    gate.loadProperties(readProperties(gateElement));
+
                     gatesById.put(gate.getId(), gate);
                 }
             }
@@ -218,6 +231,19 @@ public class SchemeLoader {
         }
 
         return true;
+    }
+
+    private static Map<String, String> readProperties(Element gateElement) {
+        Map<String, String> properties = new HashMap<>();
+        Element propertiesElement = gateElement.getChild("properties");
+        if (propertiesElement != null) {
+            for (Element propertyElement : propertiesElement.getChildren("property")) {
+                String name = propertyElement.getAttributeValue("name");
+                String value = propertyElement.getAttributeValue("value");
+                if (name != null) properties.put(name, value == null ? "" : value);
+            }
+        }
+        return properties;
     }
 
     private static Pin findPin(SchematicSheet sheet, Element endElement, Map<String, GateSymbol> gatesById) {

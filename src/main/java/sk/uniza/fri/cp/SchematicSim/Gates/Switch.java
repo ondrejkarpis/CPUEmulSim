@@ -16,7 +16,9 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Samostatný prepínač - biely kruh s jedným prípojným bodom {@code O}. Kliknutím na kruh
@@ -193,6 +195,24 @@ public class Switch extends GateSymbol {
 
     public boolean isOn() {
         return on;
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("pinSide", outPin.getExitSide().name());
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String side = properties.get("pinSide");
+        if (side != null) {
+            try {
+                placeOutput(Side.valueOf(side));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
     }
 
     public boolean isContextMenuShowing() {

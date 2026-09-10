@@ -21,7 +21,9 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -366,6 +368,56 @@ public class DataBus8 extends BusSymbol {
         this.write = writeActive;
         for (TapPoint tap : taps) {
             driveTap(tap);
+        }
+    }
+
+    /**
+     * Nastavenie počtu riadkov (dĺžky) lištovej zbernice. Ekvivalent potiahnutia rukoväťa.
+     */
+    public void setRows(int newRows) {
+        int cell = getSheet().getGrid().getSizeMin();
+        int clamped = clamp(newRows, MIN_ROWS, MAX_ROWS);
+        rows = clamped;
+        line.setHeight(clamped * cell);
+        resizeHandle.setCenterY(clamped * cell);
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("rows", Integer.toString(rows));
+
+        StringBuilder tapsValue = new StringBuilder();
+        for (TapPoint tap : taps) {
+            if (tapsValue.length() > 0) tapsValue.append(';');
+            tapsValue.append(tap.bit).append(':').append(Math.round(tap.pin.getLayoutY()));
+        }
+        properties.put("taps", tapsValue.toString());
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String rowsValue = properties.get("rows");
+        if (rowsValue != null) {
+            try {
+                setRows(Integer.parseInt(rowsValue.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        String tapsValue = properties.get("taps");
+        if (tapsValue != null && !tapsValue.isEmpty()) {
+            for (String entry : tapsValue.split(";")) {
+                String[] part = entry.split(":");
+                if (part.length != 2) continue;
+                try {
+                    int bit = Integer.parseInt(part[0].trim());
+                    double y = Double.parseDouble(part[1].trim());
+                    createTap(bit, y);
+                } catch (NumberFormatException ignored) {
+                }
+            }
         }
     }
 

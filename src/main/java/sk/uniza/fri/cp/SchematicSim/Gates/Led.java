@@ -215,6 +215,38 @@ public class Led extends GateSymbol {
     }
 
     @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("color", toHex(ledColor));
+        properties.put("pinSide", pinIn.getExitSide().name());
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String color = properties.get("color");
+        if (color != null) {
+            Color found = LED_COLORS.get(color);
+            setColor(found != null ? found : Color.web(color));
+        }
+
+        String side = properties.get("pinSide");
+        if (side != null) {
+            try {
+                placeInput(Side.valueOf(side));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+    }
+
+    private static String toHex(Color color) {
+        return String.format("#%02X%02X%02X",
+                (int) Math.round(color.getRed() * 255),
+                (int) Math.round(color.getGreen() * 255),
+                (int) Math.round(color.getBlue() * 255));
+    }
+
+    @Override
     public int getGridWidth() {
         return GRID_WIDTH;
     }
