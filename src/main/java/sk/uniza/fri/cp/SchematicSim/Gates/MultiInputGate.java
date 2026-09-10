@@ -6,6 +6,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
@@ -57,6 +58,13 @@ public abstract class MultiInputGate extends GateSymbol {
      */
     protected abstract String getSymbolText();
 
+    /**
+     * Má hradlo na výstupe negačný krúžok (NAND, NOR)?
+     */
+    protected boolean negated() {
+        return false;
+    }
+
     private void buildContextMenu() {
         for (int count : SUPPORTED_COUNTS) {
             MenuItem item = new MenuItem(count + (count == 8 ? " vstupov" : " vstupy"));
@@ -86,15 +94,27 @@ public abstract class MultiInputGate extends GateSymbol {
     @Override
     protected Pane drawBody() {
         int cell = getSheet().getGrid().getSizeMin();
-        Rectangle body = new Rectangle(getGridWidth() * cell, getGridHeight() * cell, Color.WHITESMOKE);
+        double w = getGridWidth() * cell;
+        double h = getGridHeight() * cell;
+        double bubble = cell / 4.0;
+
+        Rectangle body = new Rectangle((negated() ? w - 2 * bubble : w), h, Color.WHITESMOKE);
         body.setStroke(Color.BLACK);
         body.setStrokeWidth(1.5);
 
         Text label = new Text(getSymbolText());
         label.setLayoutX((body.getWidth() - label.getBoundsInLocal().getWidth()) / 2);
-        label.setLayoutY(body.getHeight() / 2 + 5);
+        label.setLayoutY(h / 2 + 5);
 
-        return new Pane(body, label);
+        Pane pane = new Pane(body, label);
+        if (negated()) {
+            Circle negationBubble = new Circle(w - bubble, h / 2.0, bubble);
+            negationBubble.setFill(Color.WHITESMOKE);
+            negationBubble.setStroke(Color.BLACK);
+            negationBubble.setStrokeWidth(1.5);
+            pane.getChildren().add(negationBubble);
+        }
+        return pane;
     }
 
     @Override

@@ -32,6 +32,8 @@ import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
 import sk.uniza.fri.cp.SchematicSim.DescriptionPane;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Led;
+import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
+import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Ram256;
@@ -160,6 +162,8 @@ public class SchematicController {
         //logické hradlá
         picker.registerItem(new AndGate());
         picker.registerItem(new OrGate());
+        picker.registerItem(new NandGate());
+        picker.registerItem(new NorGate());
         picker.registerItem(new NotGate());
 
         //zariadenia komunikujúce so zbernicou CPU
