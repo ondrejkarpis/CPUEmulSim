@@ -102,13 +102,15 @@ public abstract class MultiInputGate extends GateSymbol {
         body.setStroke(Color.BLACK);
         body.setStrokeWidth(1.5);
 
+        double bubbleY = outputRow() * cell;
+
         Text label = new Text(getSymbolText());
         label.setLayoutX((body.getWidth() - label.getBoundsInLocal().getWidth()) / 2);
         label.setLayoutY(h / 2 + 5);
 
         Pane pane = new Pane(body, label);
         if (negated()) {
-            Circle negationBubble = new Circle(w - bubble, h / 2.0, bubble);
+            Circle negationBubble = new Circle(w - bubble, bubbleY, bubble);
             negationBubble.setFill(Color.WHITESMOKE);
             negationBubble.setStroke(Color.BLACK);
             negationBubble.setStrokeWidth(1.5);
