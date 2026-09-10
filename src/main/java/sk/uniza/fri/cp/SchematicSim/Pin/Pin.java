@@ -266,7 +266,6 @@ public abstract class Pin extends Group implements Connectable {
 
     public void clearWireEnd() {
         this.connectedWireEnd = null;
-        this.potential.update();
     }
 
     @Override
