@@ -459,12 +459,19 @@ public class SchematicController {
     }
 
     /**
+     * Je s aktuálnou schémou spojený súbor (dá sa uložiť priamo)?
+     */
+    public boolean hasCurrentFile() {
+        return currentFile != null;
+    }
+
+    /**
      * Uloženie schémy do súboru.
      *
      * @param saveAs Uložiť ako?
      * @return true ak sa podarilo uložiť, false inak.
      */
-    private boolean saveCircuit(boolean saveAs) {
+    public boolean saveCircuit(boolean saveAs) {
         File file = saveAs ? null : currentFile;
 
         if (currentFile == null || saveAs) {

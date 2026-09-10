@@ -156,7 +156,7 @@ public class AddressBus16 extends BusSymbol {
     public Pin createTap(int bit, double localY) {
         int cell = getSheet().getGrid().getSizeMin();
         double x = RAIL_WIDTH * cell / 2.0;
-        double y = clamp(localY, cell, rows * cell);
+        double y = snap(clamp(localY, cell, rows * cell), cell);
 
         TapPin pin = new TapPin(this, "AB" + bit, bit);
         pin.setLayoutX(x);
@@ -337,6 +337,10 @@ public class AddressBus16 extends BusSymbol {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static double snap(double value, double cell) {
+        return Math.round(value / cell) * cell;
     }
 
     private static int clamp(int value, int min, int max) {

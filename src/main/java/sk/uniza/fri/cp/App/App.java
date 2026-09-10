@@ -95,5 +95,6 @@ public class App extends Application {
 
         CpuLayoutLoader.<CPUController>getController().setSchematicStage(schematicStage);
         CpuLayoutLoader.<CPUController>getController().setSchematicSheet(schematicController.getSheet());
+        CpuLayoutLoader.<CPUController>getController().setSchematicController(schematicController);
     }
 }

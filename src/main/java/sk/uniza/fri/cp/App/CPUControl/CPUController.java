@@ -41,6 +41,7 @@ import sk.uniza.fri.cp.App.AboutDialog;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.CodeEditorFactory;
 import sk.uniza.fri.cp.App.CPUControl.CodeEditor.RichTextFXHelpers;
 import sk.uniza.fri.cp.App.CPUControl.io.ConsoleOutputStream;
+import sk.uniza.fri.cp.App.SchematicControl.SchematicController;
 import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.CPUEmul.CPU;
 import sk.uniza.fri.cp.CPUEmul.CPUStates;
@@ -149,6 +150,7 @@ public class CPUController implements Initializable {
     private Button btnSimulator;
     private Stage schematicStage;
     private SchematicSheet schematicSheet;
+    private SchematicController schematicController;
 
 	//registre
 	@FXML private TextField tfRegA;
@@ -521,6 +523,13 @@ public class CPUController implements Initializable {
      */
     public void setSchematicSheet(SchematicSheet sheet) {
         this.schematicSheet = sheet;
+    }
+
+    /**
+     * Nastavenie controlleru okna schémy (kvôli uloženiu schémy pri ukončení programu).
+     */
+    public void setSchematicController(SchematicController controller) {
+        this.schematicController = controller;
     }
 
     /**
@@ -900,26 +909,38 @@ public class CPUController implements Initializable {
     }
 
     /**
-     * Výstraha pre užívateľa, ak má aktuálna schéma nezmenené zmeny (zatiaľ bez uloženia).
+     * Výstraha pre užívateľa s otázkou na ďalší postup, ak aktuálna schéma nie je uložená.
      *
      * @return true - volajúca procedúra môže pokračovať, false - užívateľ chce zostať
      */
     private boolean continueIfUnsavedSchematic() {
         if (schematicSheet == null || !schematicSheet.hasChanged()) return true;
+        if (schematicController == null) return true;
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Potvrdenie");
         alert.setHeaderText("Zmeny v schéme neboli uložené");
-        alert.setContentText("Schéma zatiaľ nepodporuje ukladanie. Pokračovať?");
+        alert.setContentText("Prajete si uložiť zmeny?");
 
+        ButtonType btnTypeSave = new ButtonType("Uložiť");
+        ButtonType btnTypeSaveAs = new ButtonType("Uložiť ako");
         ButtonType btnTypeNo = new ButtonType("Nie");
-        ButtonType btnTypeYes = new ButtonType("Pokračovať", ButtonBar.ButtonData.OK_DONE);
+        ButtonType btnTypeCancel = new ButtonType("Zrušiť");
 
         alert.getButtonTypes().clear();
-        alert.getButtonTypes().addAll(btnTypeYes, btnTypeNo);
+        if (schematicController.hasCurrentFile()) alert.getButtonTypes().add(btnTypeSave);
+        alert.getButtonTypes().addAll(btnTypeSaveAs, btnTypeNo, btnTypeCancel);
 
         Optional<ButtonType> result = alert.showAndWait();
-        return result.isPresent() && result.get() == btnTypeYes;
+        if (!result.isPresent() || result.get() == btnTypeCancel) {
+            return false;
+        } else if (result.get() == btnTypeSaveAs) {
+            return schematicController.saveCircuit(true);
+        } else if (result.get() == btnTypeSave) {
+            return schematicController.saveCircuit(false);
+        }
+
+        return true;
     }
 
     /**
