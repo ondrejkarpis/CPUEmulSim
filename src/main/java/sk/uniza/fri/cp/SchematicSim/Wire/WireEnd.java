@@ -261,10 +261,20 @@ public class WireEnd extends Joint {
         } else if (this.junction != null) {
             this.junction.layoutXProperty().removeListener(junctionPositionChangeListener);
             this.junction.layoutYProperty().removeListener(junctionPositionChangeListener);
+            WireJunction orphanedJunction = this.junction;
             this.junction.removeWireEnd(this);
             this.junction = null;
             this.getWire().updatePotential();
             this.setDefaultColor();
+
+            // Ak po odpojení tohto konca už na spájači nezostane žiadny pripojený koniec,
+            // spájač osiroteje a zruší sa - kmeňový vodič sa v mieste spájača spojí späť
+            // do jednej priamky. Toto sa stane napr. pri zmazaní odbočky, ktorá spájala
+            // dva iné vodiče: čierny krúžok na kmeňovom vodiči v mieste odpojenej odbočky
+            // sa odstráni.
+            if (orphanedJunction.getConnectedEnds().isEmpty()) {
+                orphanedJunction.delete();
+            }
         }
     }
 
