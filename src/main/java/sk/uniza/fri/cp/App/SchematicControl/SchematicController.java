@@ -37,6 +37,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Ram256;
+import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.Switch;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
@@ -169,6 +170,7 @@ public class SchematicController {
         //zariadenia komunikujúce so zbernicou CPU
         picker.registerItem(new Ram256());
         picker.registerItem(new Led());
+        picker.registerItem(new SevenSegmentDisplay());
         picker.registerItem(new Switch());
 
         //zbernice
