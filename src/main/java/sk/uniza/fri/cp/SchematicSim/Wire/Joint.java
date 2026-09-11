@@ -133,6 +133,16 @@ public class Joint extends Movable {
         this.joint.setRadius(radius);
     }
 
+    /**
+     * Viditeľnosť základného (tmavého) bodu tohto zlomu. {@link WireEnd} ho skrýva - koniec vodiča
+     * sa vykresľuje bez krúžku; čierny krúžok tak ostáva len na {@link WireJunction}, kde sa
+     * stretávajú dva vodiče. Krúžok sa iba skryje, nie odstráni, aby naďalej fungoval
+     * {@link #incRadius()} aj pick-test.
+     */
+    protected void setJointDotVisible(boolean visible) {
+        this.joint.setVisible(visible);
+    }
+
     protected Group generateJointGraphic(double radius) {
         Group graphics = new Group();
 

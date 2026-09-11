@@ -24,7 +24,7 @@ import java.util.List;
  */
 public class WireJunction extends Joint implements Connectable {
 
-    private static final Color FILL_COLOR = Color.DARKGRAY;
+    private static final Color FILL_COLOR = Color.BLACK;
 
     private final List<WireEnd> connectedEnds = new ArrayList<>();
     private final Circle junctionDot;
@@ -34,7 +34,7 @@ public class WireJunction extends Joint implements Connectable {
         super(sheet, wire);
 
         GridSystem grid = getSheet().getGrid();
-        double r = grid.getSizeMin() / 5.0;
+        double r = grid.getSizeMin() / 3.7;
 
         this.junctionDot = new Circle(0, 0, r, FILL_COLOR);
         this.colorizerDot = new Circle(0, 0, r * 1.3, Color.RED);

@@ -61,6 +61,9 @@ public class WireEnd extends Joint {
     public WireEnd(SchematicSheet sheet, Wire wire) {
         super(sheet, wire);
 
+        // koniec vodiča sa vykresľuje bez čierneho krúžku - krúžok je len na spájači (WireJunction)
+        this.setJointDotVisible(false);
+
         this.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
             getWire().setMouseTransparent(true);
             getWire().setOpacity(0.5);
@@ -214,10 +217,19 @@ public class WireEnd extends Joint {
         return pin != null ? pin.getExitSide() : null;
     }
 
+    /**
+     * Koniec vodiča sa nikdy nevykresľuje farebným krúžkom - ak by sme {@code setColor} nechali
+     * na predkovi, po pripojení by na konci zasvietil krúžok. Krúžky tak ostávajú len na
+     * {@link WireJunction}, kde sa stretávajú dva vodiče.
+     */
+    @Override
+    public void setColor(Color color) {
+        // bez vizuálneho krúžku na konci vodiča
+    }
+
     @Override
     public void setDefaultColor() {
-        if (this.isConnected()) this.setColor(this.getWire().getColor().brighter());
-        else super.setDefaultColor();
+        super.setDefaultColor();
     }
 
     @Override
