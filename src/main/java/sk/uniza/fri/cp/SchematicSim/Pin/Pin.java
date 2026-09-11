@@ -20,6 +20,7 @@ import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 
 /**
  * Vývod (pin) logickej súčiastky. Nahrádza dvojicu Pin+Socket z BreadboardSim - narozdiel od nich
@@ -95,6 +96,18 @@ public abstract class Pin extends Group implements Connectable {
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         source.owner.getSheet().addItem(creatingWire);
+        return creatingWire;
+    }
+
+    /**
+     * Založenie rozpracovaného vodiča z existujúceho spájača (WireJunction) na vodiči.
+     * Umožňuje začínať nové vodiče na existujúcich vodičoch.
+     */
+    public static Wire beginWireCreation(WireJunction source) {
+        creatingWire = new Wire(source);
+        creatingWire.setMouseTransparent(true);
+        creatingWire.setOpacity(0.5);
+        source.getSheet().addItem(creatingWire);
         return creatingWire;
     }
 

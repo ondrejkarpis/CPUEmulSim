@@ -22,7 +22,12 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
+import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireSegment;
+import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -175,6 +180,128 @@ public class SchematicSheet extends ScrollPane {
             double deltaV = deltaY * (this.getHmax() - this.getHmin()) / extraHeight;
             this.setVvalue(Math.max(0, Math.min(this.getVmax(), this.getVvalue() - deltaV)));
         });
+
+        setupWireToWireHandler();
+    }
+
+    /**
+     * Nastavenie spracovania udalostí pre pripájanie vodičov na iné vodiče.
+     * Zachytáva uvoľnenie myši na úrovni scény, aby sa detekovalo, keď užívateľ
+     * pustí vodič na segmente iného vodiča - vytvorí sa spájač (WireJunction).
+     */
+    private void setupWireToWireHandler() {
+        this.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                newScene.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
+                    Wire inProgress = Pin.getInProgressWire();
+                    if (inProgress == null) return;
+
+                    // pickResult vráti najhlbší hite (cierka spájača / polyline segmentu),
+                    // preto prechádzame rodičovacou reťazou až na WireJunction/WireSegment.
+                    // Koniec odbočky (WireEnd) s napojeným spájačom sa tiež berie ako spájač.
+                    WireSegment segmentTarget = null;
+                    WireJunction junctionTarget = null;
+                    Node target = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+                    while (target != null && segmentTarget == null && junctionTarget == null) {
+                        if (target instanceof WireSegment) {
+                            segmentTarget = (WireSegment) target;
+                        } else if (target instanceof WireJunction) {
+                            junctionTarget = (WireJunction) target;
+                        } else if (target instanceof WireEnd) {
+                            junctionTarget = ((WireEnd) target).getJunction();
+                        }
+                        target = target.getParent();
+                    }
+
+                    if (segmentTarget != null) {
+                        Wire targetWire = segmentTarget.getWire();
+                        if (targetWire == inProgress) {
+                            // pustenie na vlastný segment = pustenie "do prázdna" - ukončíme bez pripojenia
+                            if (!inProgress.areBothEndsConnected()) {
+                                inProgress.delete();
+                            }
+                            Pin.finishInProgressWire();
+                            event.consume();
+                            return;
+                        }
+
+                        Point2D sheetXY = layersManager.getLayer("background")
+                                .sceneToLocal(event.getSceneX(), event.getSceneY());
+                        WireJunction junction = connectToWireAt(targetWire, sheetXY.getX(), sheetXY.getY());
+                        if (junction != null) {
+                            if (junction == inProgress.getStartJunction()) {
+                                // pustenie späť na vlastný počiatočný spájač = zrušenie ťahu
+                                if (!inProgress.areBothEndsConnected()) {
+                                    inProgress.delete();
+                                }
+                                Pin.finishInProgressWire();
+                                event.consume();
+                                return;
+                            }
+                            inProgress.catchFreeEnd().connect(junction);
+                            finishWireDrop(inProgress);
+                            event.consume();
+                        }
+                    } else if (junctionTarget != null) {
+                        WireJunction junction = junctionTarget;
+                        if (junction.getWire() == inProgress) {
+                            if (!inProgress.areBothEndsConnected()) {
+                                inProgress.delete();
+                            }
+                            Pin.finishInProgressWire();
+                            event.consume();
+                            return;
+                        }
+                        if (junction == inProgress.getStartJunction()) {
+                            if (!inProgress.areBothEndsConnected()) {
+                                inProgress.delete();
+                            }
+                            Pin.finishInProgressWire();
+                            event.consume();
+                            return;
+                        }
+                        inProgress.catchFreeEnd().connect(junction);
+                        finishWireDrop(inProgress);
+                        event.consume();
+                    }
+                });
+            }
+        });
+    }
+
+    private void finishWireDrop(Wire inProgress) {
+        inProgress.setMouseTransparent(false);
+        inProgress.setOpacity(1);
+        Pin.finishInProgressWire();
+    }
+
+    /**
+     * Vytvorí spájač na najbližšom segmente vodiča ku danej pozícii a pripojí naň nový vodič.
+     * Ak sa v blízkosti už spájač nachádza, vráti ten (predchádza sa duplicitným spájačom).
+     */
+    private WireJunction connectToWireAt(Wire targetWire, double sheetX, double sheetY) {
+        if (targetWire == null) return null;
+
+        WireJunction near = findJunctionNear(targetWire, sheetX, sheetY);
+        if (near != null) return near;
+
+        GridSystem grid = gridSystem;
+        int gridX = (int) Math.round(sheetX / grid.getSizeX());
+        int gridY = (int) Math.round(sheetY / grid.getSizeY());
+        Point2D snapPos = grid.gridToPixel(gridX, gridY);
+
+        return targetWire.createJunction(snapPos);
+    }
+
+    private WireJunction findJunctionNear(Wire wire, double x, double y) {
+        for (Joint joint : wire.getJoints()) {
+            if (joint instanceof WireJunction
+                    && Math.abs(joint.getLayoutX() - x) < 8
+                    && Math.abs(joint.getLayoutY() - y) < 8) {
+                return (WireJunction) joint;
+            }
+        }
+        return null;
     }
 
     public double getAppliedScale() {

@@ -5,6 +5,7 @@ import javafx.scene.layout.Pane;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,6 +81,11 @@ public class SheetLayersManager {
             Wire wire = (Wire) object;
             this.wiresLayer.getChildren().remove(wire);
             this.wires.remove(wire);
+            return true;
+        }
+
+        if (object instanceof WireJunction) {
+            ((WireJunction) object).delete();
             return true;
         }
 

@@ -5,6 +5,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.transform.Transform;
+import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SheetEvent;
@@ -19,6 +20,7 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 public class WireEnd extends Joint {
 
     private Pin pin;
+    private WireJunction junction;
 
     private double lastPosX = -1;
     private double lastPosY = -1;
@@ -41,6 +43,21 @@ public class WireEnd extends Joint {
         lastPosY = getLayoutY();
     };
 
+    // pri zmene pozície spájača (WireJunction) sa posunie aj koniec vodiča
+    private final ChangeListener<Number> junctionPositionChangeListener = (observable, oldValue, newValue) -> {
+        if (this.junction == null) return;
+
+        double deltaX = junction.getLayoutX() - lastPosX;
+        double deltaY = junction.getLayoutY() - lastPosY;
+        setLayoutX(junction.getLayoutX());
+        setLayoutY(junction.getLayoutY());
+
+        getWire().moveJointsWithEnd(this, deltaX, deltaY);
+
+        lastPosX = getLayoutX();
+        lastPosY = getLayoutY();
+    };
+
     public WireEnd(SchematicSheet sheet, Wire wire) {
         super(sheet, wire);
 
@@ -52,8 +69,23 @@ public class WireEnd extends Joint {
         this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
             startFullDrag();
             this.moved = true;
-            if (this.pin != null) this.disconnect();
-            this.setDefaultColor();
+            if (this.pin != null) {
+                this.disconnect();
+                this.setDefaultColor();
+            } else if (this.junction != null) {
+                Pin.beginWireCreation(this.junction);
+            }
+        });
+
+        this.addEventFilter(MouseEvent.MOUSE_DRAGGED, event -> {
+            Wire inProgress = Pin.getInProgressWire();
+            if (this.junction != null && inProgress != null) {
+                Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
+                inProgress.updateBranchDrag(sheetXY.getX(), sheetXY.getY());
+                this.setLayoutX(this.junction.getLayoutX());
+                this.setLayoutY(this.junction.getLayoutY());
+                event.consume();
+            }
         });
 
         this.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
@@ -61,6 +93,17 @@ public class WireEnd extends Joint {
             getWire().setOpacity(1);
             if (!this.moved) getSheet().addSelect(getWire());
             this.moved = false;
+
+            Wire inProgress = Pin.getInProgressWire();
+            if (inProgress != null) {
+                inProgress.setMouseTransparent(false);
+                inProgress.setOpacity(1);
+                if (!inProgress.areBothEndsConnected()) {
+                    inProgress.delete();
+                }
+                Pin.finishInProgressWire();
+            }
+
             event.consume();
         });
 
@@ -68,15 +111,23 @@ public class WireEnd extends Joint {
     }
 
     public boolean isConnected() {
-        return this.pin != null;
+        return this.pin != null || this.junction != null;
     }
 
     /**
-     * Pripojenie konca vodiča k pinu. Ak bol predtým pripojený inde, najprv sa odpojí.
-     * Ak sa nepodarí pripojiť (pin je obsadený), zafarbí sa na červeno.
+     * Pripojenie konca vodiča k pinu alebo spájaču. Ak bol predtým pripojený inde,
+     * najprv sa odpojí. Ak sa nepodarí pripojiť (pin je obsadený), zafarbí sa na červeno.
      */
-    public void connect(Pin target) {
-        if (this.pin == null) {
+    public void connect(Connectable target) {
+        if (target instanceof Pin) {
+            connectToPin((Pin) target);
+        } else if (target instanceof WireJunction) {
+            connectToJunction((WireJunction) target);
+        }
+    }
+
+    private void connectToPin(Pin target) {
+        if (this.pin == null && this.junction == null) {
             if (target != null && !target.isOccupied()) {
                 this.pin = target;
                 this.pin.setWireEnd(this);
@@ -97,12 +148,43 @@ public class WireEnd extends Joint {
             }
         } else {
             disconnect();
-            connect(target);
+            connectToPin(target);
+        }
+    }
+
+    private void connectToJunction(WireJunction target) {
+        if (this.pin == null && this.junction == null) {
+            if (target != null) {
+                this.junction = target;
+                target.addWireEnd(this);
+
+                this.junction.layoutXProperty().addListener(junctionPositionChangeListener);
+                this.junction.layoutYProperty().addListener(junctionPositionChangeListener);
+
+                Point2D p = target.getConnectionPoint();
+                setLayoutX(p.getX());
+                setLayoutY(p.getY());
+
+                lastPosX = getLayoutX();
+                lastPosY = getLayoutY();
+
+                this.setColor(this.getWire().getColor().brighter());
+                this.getWire().updatePotential();
+            } else {
+                this.setColor(Color.RED);
+            }
+        } else {
+            disconnect();
+            connectToJunction(target);
         }
     }
 
     public Pin getPin() {
         return pin;
+    }
+
+    public WireJunction getJunction() {
+        return junction;
     }
 
     /**
@@ -145,26 +227,32 @@ public class WireEnd extends Joint {
 
     @Override
     public void delete() {
+        this.disconnect();
         super.delete();
         this.getWire().delete();
     }
 
     /**
-     * Odpojenie konca od pinu.
+     * Odpojenie konca od pinu alebo spájača.
      */
     protected void disconnect() {
-        if (this.pin == null) return;
-        Pin pinToUpdate = this.pin;
-
-        this.pin.getOwner().localToParentTransformProperty().removeListener(pinPositionChangeListener);
-        this.pin.clearWireEnd();
-        this.pin = null;
-
-        this.getWire().updatePotential();
-        this.setDefaultColor();
-
-        if (getSheet().isSimulationRunning()) {
-            getSheet().addEvent(new SheetEvent(pinToUpdate));
+        if (this.pin != null) {
+            Pin pinToUpdate = this.pin;
+            this.pin.getOwner().localToParentTransformProperty().removeListener(pinPositionChangeListener);
+            this.pin.clearWireEnd();
+            this.pin = null;
+            this.getWire().updatePotential();
+            this.setDefaultColor();
+            if (getSheet().isSimulationRunning()) {
+                getSheet().addEvent(new SheetEvent(pinToUpdate));
+            }
+        } else if (this.junction != null) {
+            this.junction.layoutXProperty().removeListener(junctionPositionChangeListener);
+            this.junction.layoutYProperty().removeListener(junctionPositionChangeListener);
+            this.junction.removeWireEnd(this);
+            this.junction = null;
+            this.getWire().updatePotential();
+            this.setDefaultColor();
         }
     }
 

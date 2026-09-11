@@ -59,7 +59,8 @@ public class WireSegment extends Group {
         Point2D p0 = startJoint.getConnectionPoint();
         Point2D p1 = endJoint.getConnectionPoint();
 
-        List<Point2D> path = OrthogonalRouter.route(p0, startJoint.getExitSide(), p1, endJoint.getExitSide());
+        List<Point2D> path = OrthogonalRouter.route(p0, startJoint.getExitSide(), p1, endJoint.getExitSide(),
+                wire.getBranchExit());
 
         Double[] flat = path.stream().flatMap(p -> Stream.of(p.getX(), p.getY())).toArray(Double[]::new);
         line.getPoints().setAll(flat);

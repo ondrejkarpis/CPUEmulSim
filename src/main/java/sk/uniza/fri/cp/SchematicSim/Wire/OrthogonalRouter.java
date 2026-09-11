@@ -24,11 +24,22 @@ public final class OrthogonalRouter {
     }
 
     public static List<Point2D> route(Point2D p0, Side side0, Point2D p1, Side side1) {
+        return route(p0, side0, p1, side1, null);
+    }
+
+    /**
+     * Výpočet trasy s preferovaným smerom prvej úsečky. Používa sa pri ťahaní odbočky zo
+     * spájača na vodiči, aby vodič vychádzal kolmo na kmeň v smere kurzora (a neprekrýval
+     * pôvodný vodič), namiesto predvoleného "najprv vodorovne".
+     *
+     * @param preferredFirst ak nie je null, prvá úsečka ide v tomto smere (TOP/BOTTOM alebo LEFT/RIGHT)
+     */
+    public static List<Point2D> route(Point2D p0, Side side0, Point2D p1, Side side1, Side preferredFirst) {
         // ak sú oba body na tej istej priamke, priamka bez zalomenia stačí (aj bez pevných smerov)
         if (side0 == null && side1 == null) {
             List<Point2D> pts = new ArrayList<>();
             pts.add(p0);
-            addFreeElbow(pts, p0, p1);
+            addElbow(pts, p0, p1, preferredFirst);
             pts.add(p1);
             return collapseColinear(pts);
         }
@@ -43,15 +54,19 @@ public final class OrthogonalRouter {
             Point2D s0 = p0.add(dir0.multiply(STUB));
             pts.add(s0);
             addFreeElbow(pts, s0, p1);
+            pts.add(p1);
         } else if (dir0 == null) {
-            Point2D s1 = p1.add(dir1.multiply(STUB));
-            addFreeElbow(pts, p0, s1);
+            // voľný začiatok (spájač na vodiči): najprv preferovanou osou ku stubu pinu,
+            // posledná úsečka je kolmý vývod z tela súčiastky (STUB)
+            Point2D s1 = dir1 == null ? p1 : p1.add(dir1.multiply(STUB));
+            addElbow(pts, p0, s1, preferredFirst);
             pts.add(s1);
+            if (dir1 != null) pts.add(p1);
         } else {
             routeFixedToFixed(pts, p0, dir0, p1, dir1);
+            pts.add(p1);
         }
 
-        pts.add(p1);
         return collapseColinear(pts);
     }
 
@@ -60,6 +75,19 @@ public final class OrthogonalRouter {
 
     private static void addFreeElbow(List<Point2D> pts, Point2D a, Point2D b) {
         if (a.getX() != b.getX() && a.getY() != b.getY()) {
+            pts.add(new Point2D(b.getX(), a.getY()));
+        }
+    }
+
+    /**
+     * Voľný ohyb medzi bodmi a a b. Bez preferencie vedie najprv vodorovne a potom zvislo;
+     * s preferenciou TOP/BOTTOM vedie najprv zvislo (kolmo), s LEFT/RIGHT najprv vodorovne.
+     */
+    private static void addElbow(List<Point2D> pts, Point2D a, Point2D b, Side preferred) {
+        if (a.getX() == b.getX() || a.getY() == b.getY()) return;
+        if (preferred == Side.TOP || preferred == Side.BOTTOM) {
+            pts.add(new Point2D(a.getX(), b.getY()));
+        } else {
             pts.add(new Point2D(b.getX(), a.getY()));
         }
     }

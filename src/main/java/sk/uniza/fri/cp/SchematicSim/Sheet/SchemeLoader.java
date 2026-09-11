@@ -1,5 +1,6 @@
 package sk.uniza.fri.cp.SchematicSim.Sheet;
 
+import javafx.geometry.Point2D;
 import javafx.scene.paint.Color;
 import org.jdom2.Document;
 import org.jdom2.Element;
@@ -12,6 +13,7 @@ import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -20,6 +22,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +144,18 @@ public class SchemeLoader {
             Element pinIndex = new Element("pinIndex");
             pinIndex.addContent(Integer.toString(pin.getOwner().getPins().indexOf(pin)));
             endElement.addContent(pinIndex);
+        } else if (end.getJunction() != null) {
+            Element junction = new Element("junction");
+
+            Element x = new Element("x");
+            x.addContent(Double.toString(end.getJunction().getLayoutX()));
+            junction.addContent(x);
+
+            Element y = new Element("y");
+            y.addContent(Double.toString(end.getJunction().getLayoutY()));
+            junction.addContent(y);
+
+            endElement.addContent(junction);
         } else {
             Element x = new Element("x");
             x.addContent(Double.toString(end.getLayoutX()));
@@ -196,31 +211,34 @@ public class SchemeLoader {
             //vodiče
             Element wiresElement = rootElement.getChild("Wires");
             if (wiresElement != null) {
+                List<Wire> loadedWires = new ArrayList<>();
+                List<WireEntry> pendingResolve = new ArrayList<>();
                 for (Element wireElement : wiresElement.getChildren("Wire")) {
-                    Wire wire = new Wire(sheet);
-                    sheet.addItem(wire);
-                    wire.changeColor(Color.valueOf(colorFromHex(wireElement.getAttributeValue("color"))));
-                    WireEnd[] ends = wire.getEnds();
+                    WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires);
+                    if (entry == null) continue;
 
-                    Pin startPin = findPin(ends[0].getSheet(), wireElement.getChild("start"), gatesById);
-                    Pin endPin = findPin(ends[1].getSheet(), wireElement.getChild("end"), gatesById);
-                    if (startPin == null || endPin == null
-                            || startPin.isOccupied() || endPin.isOccupied()) {
-                        wire.delete();
-                        continue;
+                    if (entry.wire.areBothEndsConnected()) {
+                        loadedWires.add(entry.wire);
+                    } else {
+                        pendingResolve.add(entry);
                     }
+                }
 
-                    ends[0].connect(startPin);
-                    ends[1].connect(endPin);
+                // druhý prechod - vodiče so spájačom na konci, ktoré boli uložené PRED kmeňovým
+                // vodičom (v praxi sa to nestáva, ale kvôli robustnosti to ošetrujeme)
+                List<WireEntry> stillPending = new ArrayList<>();
+                for (WireEntry entry : pendingResolve) {
+                    resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires);
+                    resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires);
 
-                    Element jointsElement = wireElement.getChild("Joints");
-                    if (jointsElement != null) {
-                        for (Element jointElement : jointsElement.getChildren("joint")) {
-                            double x = Double.parseDouble(jointElement.getChildText("x"));
-                            double y = Double.parseDouble(jointElement.getChildText("y"));
-                            wire.splitLastSegment().moveTo(x, y);
-                        }
+                    if (entry.wire.areBothEndsConnected()) {
+                        loadedWires.add(entry.wire);
+                    } else {
+                        stillPending.add(entry);
                     }
+                }
+                for (WireEntry entry : stillPending) {
+                    entry.wire.delete();
                 }
             }
         } catch (JDOMException | IOException | InvocationTargetException | InstantiationException
@@ -231,6 +249,55 @@ public class SchemeLoader {
         }
 
         return true;
+    }
+
+    /**
+     * Pomocná trieda spájajúca načítaný vodič s XML elementmi jeho koncov, aby bolo možné
+     * vykonať neskorší (druhý) prechod na vyriešenie koncov napojených na spájače.
+     */
+    private static final class WireEntry {
+        final Wire wire;
+        final Element startElement;
+        final Element endElement;
+
+        WireEntry(Wire wire, Element startElement, Element endElement) {
+            this.wire = wire;
+            this.startElement = startElement;
+            this.endElement = endElement;
+        }
+    }
+
+    /**
+     * Načítanie jedného vodiča: pripojenie koncov na piny, rozdelanie zlomov a prvý pokus
+     * o vyriešenie koncov na spájačoch. Vracia záznam pre prípadný druhý prechod, alebo
+     * {@code null} ak sa vodič nepodarilo načítať.
+     */
+    private static WireEntry loadWire(SchematicSheet sheet, Element wireElement,
+                                      Map<String, GateSymbol> gatesById, List<Wire> loadedWires) {
+        Element startElement = wireElement.getChild("start");
+        Element endElement = wireElement.getChild("end");
+
+        Wire wire = new Wire(sheet);
+        sheet.addItem(wire);
+        wire.changeColor(Color.valueOf(colorFromHex(wireElement.getAttributeValue("color"))));
+        WireEnd[] ends = wire.getEnds();
+
+        connectPinEnd(ends[0], startElement, gatesById);
+        connectPinEnd(ends[1], endElement, gatesById);
+
+        Element jointsElement = wireElement.getChild("Joints");
+        if (jointsElement != null) {
+            for (Element jointElement : jointsElement.getChildren("joint")) {
+                double x = Double.parseDouble(jointElement.getChildText("x"));
+                double y = Double.parseDouble(jointElement.getChildText("y"));
+                wire.splitLastSegment().moveTo(x, y);
+            }
+        }
+
+        resolveJunctionEnd(ends[0], startElement, loadedWires);
+        resolveJunctionEnd(ends[1], endElement, loadedWires);
+
+        return new WireEntry(wire, startElement, endElement);
     }
 
     private static Map<String, String> readProperties(Element gateElement) {
@@ -262,6 +329,62 @@ public class SchemeLoader {
         } catch (NumberFormatException ignored) {
         }
         return null;
+    }
+
+    private static void connectPinEnd(WireEnd end, Element endElement, Map<String, GateSymbol> gatesById) {
+        if (endElement == null || end.isConnected()) return;
+        Pin pin = findPin(end.getSheet(), endElement, gatesById);
+        if (pin != null && !pin.isOccupied()) {
+            end.connect(pin);
+        }
+    }
+
+    /**
+     * Pripojenie konca vodiča, ktorý je v súbore uložený ako spájač (junction) na iný vodič.
+     * Spájač sa vytvorí na už načítanom (kmeňovom) vodiči prechádzajúcom daným bodom.
+     *
+     * @return true ak sa koniec podarilo pripojiť na spájač.
+     */
+    private static boolean resolveJunctionEnd(WireEnd end, Element endElement, List<Wire> loadedWires) {
+        if (endElement == null || end.isConnected()) return true;
+
+        Element junctionElement = endElement.getChild("junction");
+        if (junctionElement == null) return false;
+
+        double x;
+        double y;
+        try {
+            x = Double.parseDouble(junctionElement.getChildText("x"));
+            y = Double.parseDouble(junctionElement.getChildText("y"));
+        } catch (NumberFormatException | NullPointerException e) {
+            return false;
+        }
+
+        Point2D pos = new Point2D(x, y);
+
+        // najprv hľadáme existujúci spájač v danom bode
+        for (Wire loadedWire : loadedWires) {
+            if (loadedWire == end.getWire()) continue;
+            WireJunction existing = loadedWire.findJunctionAt(pos);
+            if (existing != null) {
+                end.connect(existing);
+                return true;
+            }
+        }
+
+        // ak neexistuje, nájdeme kmeňový vodič prechádzajúci bodom a vytvoríme na ňom spájač
+        for (Wire loadedWire : loadedWires) {
+            if (loadedWire == end.getWire()) continue;
+            if (loadedWire.findSegmentNear(pos) != null) {
+                WireJunction junction = loadedWire.createJunction(pos);
+                if (junction != null) {
+                    end.connect(junction);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static String colorToHex(Color color) {
