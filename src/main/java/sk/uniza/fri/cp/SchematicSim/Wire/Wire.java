@@ -22,6 +22,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SheetEvent;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -316,11 +317,17 @@ public class Wire extends HighlightGroup {
 
         junction.moveTo(snappedPosition.getX(), snappedPosition.getY());
 
+        // rozdelením pôvodnej trasy na dve časti zachováme pôvodnú geometriu vodiča -
+        // oba nové segmenty prevezmú príslušné úseky pôvodnej trasy
+        List<Point2D> firstPath = new ArrayList<>();
+        List<Point2D> secondPath = new ArrayList<>();
+        splitRoutePoints(targetSegment.getRoutedPoints(), snappedPosition, firstPath, secondPath);
+
         firstJoint.removeWireSegment(targetSegment);
         secondJoint.removeWireSegment(targetSegment);
 
-        WireSegment firstSegment = new WireSegment(this, firstJoint, junction);
-        WireSegment secondSegment = new WireSegment(this, junction, secondJoint);
+        WireSegment firstSegment = new WireSegment(this, firstJoint, junction, firstPath);
+        WireSegment secondSegment = new WireSegment(this, junction, secondJoint, secondPath);
 
         this.segments.add(firstSegment);
         this.segments.add(secondSegment);
@@ -424,6 +431,93 @@ public class Wire extends HighlightGroup {
     }
 
     /**
+     * Rozdelenie trasy (zlomenej čiary) v bode {@code cut}, ktorý leží na tejto trase,
+     * na dve nadväzujúce časti {@code firstPath} + {@code secondPath}. Používa sa pri
+     * založení spájača - nové segmenty prevezmú pôvodné úseky trasy, aby sa vodič
+     * opticky nezmenil a nemusel sa prepočítavať routing.
+     */
+    private static void splitRoutePoints(List<Double> points, Point2D cut, List<Point2D> firstPath, List<Point2D> secondPath) {
+        List<Point2D> pts = toPoint2DList(points);
+
+        int edgeIndex = 0;
+        double bestDist = Double.MAX_VALUE;
+        for (int i = 0; i < pts.size() - 1; i++) {
+            double dist = distanceToSegment(cut.getX(), cut.getY(),
+                    pts.get(i).getX(), pts.get(i).getY(),
+                    pts.get(i + 1).getX(), pts.get(i + 1).getY());
+            if (dist < bestDist) {
+                bestDist = dist;
+                edgeIndex = i;
+            }
+        }
+
+        int splitVertex = edgeIndex + 1;
+        boolean onVertex = cut.distance(pts.get(splitVertex)) < 1e-6;
+
+        for (int j = 0; j < splitVertex; j++) {
+            firstPath.add(pts.get(j));
+        }
+        firstPath.add(cut);
+
+        secondPath.add(cut);
+        for (int j = onVertex ? splitVertex + 1 : splitVertex; j < pts.size(); j++) {
+            secondPath.add(pts.get(j));
+        }
+
+        dedupConsecutive(firstPath);
+        dedupConsecutive(secondPath);
+    }
+
+    /**
+     * Zlúčenie trás dvoch segmentov, ktoré sa stretávajú na spoločnom zlome {@code shared}.
+     * Prvý segment sa preberá v smere od jeho vzdialenejšieho zlomu k spoločnému, druhý
+     * od spoločného k jeho vzdialenejšiemu zlomu - výsledkom je súvislá trasa bez
+     * duplicitného spoločného bodu. Routing sa pri tom neprepočítava.
+     */
+    private static List<Point2D> mergeRoutes(WireSegment first, WireSegment second, Joint shared) {
+        List<Point2D> merged = new ArrayList<>();
+        appendRoute(merged, directedRoute(first, shared, true));
+        appendRoute(merged, directedRoute(second, shared, false));
+        return merged;
+    }
+
+    private static void appendRoute(List<Point2D> target, List<Point2D> route) {
+        for (Point2D p : route) {
+            if (target.isEmpty() || !target.get(target.size() - 1).equals(p)) target.add(p);
+        }
+    }
+
+    /**
+     * Trasa segmentu v danom smere: od spoločného zlomu smerom von ({@code towardShared=false})
+     * alebo od vzdialenejšieho zlomu k spoločnému ({@code towardShared=true}).
+     */
+    private static List<Point2D> directedRoute(WireSegment segment, Joint shared, boolean towardShared) {
+        List<Point2D> pts = toPoint2DList(segment.getRoutedPoints());
+        boolean reversed = towardShared ? segment.getStartJoint() == shared : segment.getEndJoint() == shared;
+        if (reversed) Collections.reverse(pts);
+        return pts;
+    }
+
+    private static List<Point2D> toPoint2DList(List<Double> flat) {
+        List<Point2D> pts = new ArrayList<>(flat.size() / 2);
+        for (int i = 0; i + 1 < flat.size(); i += 2) {
+            pts.add(new Point2D(flat.get(i), flat.get(i + 1)));
+        }
+        return pts;
+    }
+
+    private static void dedupConsecutive(List<Point2D> pts) {
+        Point2D prev = null;
+        for (int i = 0; i < pts.size(); i++) {
+            if (prev != null && prev.equals(pts.get(i))) {
+                pts.remove(i);
+                i--;
+            }
+            prev = pts.get(i);
+        }
+    }
+
+    /**
      * Nájde segment, ktorý spája daný joint s týmto vodičom - pre WireEnd.connect(WireJunction).
      */
     WireSegment getLastSegmentTo(Joint target) {
@@ -447,10 +541,14 @@ public class Wire extends HighlightGroup {
         Joint firstJoint = firstSegment.getOtherJoint(joint);
         Joint secondJoint = secondSegment.getOtherJoint(joint);
 
+        // zlúčené segmenty prevezmú spojené pôvodné trasy, aby sa vodič po zmazaní
+        // zlomu opticky nezmenil a nemusel sa prepočítavať routing
+        List<Point2D> mergedRoute = mergeRoutes(firstSegment, secondSegment, joint);
+
         firstJoint.removeWireSegment(firstSegment);
         secondJoint.removeWireSegment(secondSegment);
 
-        WireSegment newSegment = new WireSegment(this, firstJoint, secondJoint);
+        WireSegment newSegment = new WireSegment(this, firstJoint, secondJoint, mergedRoute);
         this.segments.add(newSegment);
         this.segmentsGroup.getChildren().add(newSegment);
 
@@ -476,6 +574,10 @@ public class Wire extends HighlightGroup {
                 Joint j0 = seg0.getOtherJoint(junction);
                 Joint j1 = seg1.getOtherJoint(junction);
 
+                // zlúčené segmenty prevezmú spojené pôvodné trasy - mazanie spájača
+                // tak nezmení vzhľad vodiča a nepreratúva sa routing
+                List<Point2D> mergedRoute = mergeRoutes(seg0, seg1, junction);
+
                 this.segments.remove(seg0);
                 this.segments.remove(seg1);
                 this.segmentsGroup.getChildren().removeAll(seg0, seg1);
@@ -483,7 +585,7 @@ public class Wire extends HighlightGroup {
                 j0.removeWireSegment(seg0);
                 j1.removeWireSegment(seg1);
 
-                WireSegment merged = new WireSegment(this, j0, j1);
+                WireSegment merged = new WireSegment(this, j0, j1, mergedRoute);
                 this.segments.add(merged);
                 this.segmentsGroup.getChildren().add(merged);
             } else {

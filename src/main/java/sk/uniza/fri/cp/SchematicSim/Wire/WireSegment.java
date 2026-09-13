@@ -29,6 +29,17 @@ public class WireSegment extends Group {
     private final Text stateLabel = new Text("Z");
 
     WireSegment(Wire wire, Joint start, Joint end) {
+        this(wire, start, end, null);
+    }
+
+    /**
+     * Vytvorenie segmentu s vopred určenou trasou. Ak je {@code path} dodaná, trasa sa
+     * neprepočítava cez {@link OrthogonalRouter}, ale preberie sa priamo. Používa sa pri
+     * rozdelení existujúceho vodiča na dva segmenty a pri zlúčení dvoch segmentov, kde je
+     * potrebné zachovať pôvodnú geometriu trasy - inak by nový routing zmenil vzhľad
+     * dotknutého vodiča.
+     */
+    WireSegment(Wire wire, Joint start, Joint end, List<Point2D> path) {
         this.wire = wire;
         this.startJoint = start;
         this.endJoint = end;
@@ -52,7 +63,12 @@ public class WireSegment extends Group {
         this.endJoint.layoutXProperty().addListener((o, ov, nv) -> updateGraphics());
         this.endJoint.layoutYProperty().addListener((o, ov, nv) -> updateGraphics());
 
-        updateGraphics();
+        if (path != null) {
+            applyPath(path);
+            updateStateLabel();
+        } else {
+            updateGraphics();
+        }
     }
 
     void updateGraphics() {
@@ -62,9 +78,13 @@ public class WireSegment extends Group {
         List<Point2D> path = OrthogonalRouter.route(p0, startJoint.getExitSide(), p1, endJoint.getExitSide(),
                 wire.getBranchExit());
 
+        applyPath(path);
+        updateStateLabel();
+    }
+
+    private void applyPath(List<Point2D> path) {
         Double[] flat = path.stream().flatMap(p -> Stream.of(p.getX(), p.getY())).toArray(Double[]::new);
         line.getPoints().setAll(flat);
-        updateStateLabel();
     }
 
     void updateStateLabel() {
