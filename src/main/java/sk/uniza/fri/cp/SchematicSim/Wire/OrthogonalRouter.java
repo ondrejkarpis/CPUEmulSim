@@ -24,7 +24,7 @@ public final class OrthogonalRouter {
     }
 
     public static List<Point2D> route(Point2D p0, Side side0, Point2D p1, Side side1) {
-        return route(p0, side0, p1, side1, null);
+        return route(p0, side0, p1, side1, null, GRID);
     }
 
     /**
@@ -35,11 +35,21 @@ public final class OrthogonalRouter {
      * @param preferredFirst ak nie je null, prvá úsečka ide v tomto smere (TOP/BOTTOM alebo LEFT/RIGHT)
      */
     public static List<Point2D> route(Point2D p0, Side side0, Point2D p1, Side side1, Side preferredFirst) {
+        return route(p0, side0, p1, side1, preferredFirst, GRID);
+    }
+
+    /**
+     * Výpočet trasy s preferovaným smerom prvej úsečky a snapovaním zlomov na mriežku.
+     * Keď je {@code grid} <= 0, zlomy sa nesnapujú (plynulý ťah rozpracovaného vodiča).
+     *
+     * @param grid veľkosť mriežky v px - zlomy (zalomenia) trasy sa zaokrúhľujú na jej násobok
+     */
+    public static List<Point2D> route(Point2D p0, Side side0, Point2D p1, Side side1, Side preferredFirst, int grid) {
         // ak sú oba body na tej istej priamke, priamka bez zalomenia stačí (aj bez pevných smerov)
         if (side0 == null && side1 == null) {
             List<Point2D> pts = new ArrayList<>();
             pts.add(p0);
-            addElbow(pts, p0, p1, preferredFirst);
+            addElbow(pts, p0, p1, preferredFirst, grid);
             pts.add(p1);
             return collapseColinear(pts);
         }
@@ -53,17 +63,17 @@ public final class OrthogonalRouter {
         if (dir0 != null && dir1 == null) {
             Point2D s0 = p0.add(dir0.multiply(STUB));
             pts.add(s0);
-            addFreeElbow(pts, s0, p1);
+            addFreeElbow(pts, s0, p1, grid);
             pts.add(p1);
         } else if (dir0 == null) {
             // voľný začiatok (spájač na vodiči): najprv preferovanou osou ku stubu pinu,
             // posledná úsečka je kolmý vývod z tela súčiastky (STUB)
             Point2D s1 = dir1 == null ? p1 : p1.add(dir1.multiply(STUB));
-            addElbow(pts, p0, s1, preferredFirst);
+            addElbow(pts, p0, s1, preferredFirst, grid);
             pts.add(s1);
             if (dir1 != null) pts.add(p1);
         } else {
-            routeFixedToFixed(pts, p0, dir0, p1, dir1);
+            routeFixedToFixed(pts, p0, dir0, p1, dir1, grid);
             pts.add(p1);
         }
 
@@ -73,9 +83,26 @@ public final class OrthogonalRouter {
     /** Dĺžka "pahýľa" tesne pri pine, aby vodič vychádzal kolmo na telo súčiastky. */
     private static final double STUB = 20;
 
-    private static void addFreeElbow(List<Point2D> pts, Point2D a, Point2D b) {
+    /** Veľkosť mriežky v px použitá pri predvolených (bezgridových) volaniach routra. */
+    private static final int GRID = 20;
+
+    /**
+     * Zaokrúhlenie súradnice na najbližší násobok mriežky. Pri {@code grid <= 0} sa súradnica
+     * nemení - používa sa pri plynulom ťahaní rozpracovaného vodiča.
+     */
+    private static double snapToGrid(double value, int grid) {
+        if (grid <= 0) return value;
+        return Math.round(value / grid) * grid;
+    }
+
+    /**
+     * Voľný ohyb medzi bodmi a a b. Zlom sa tvorí z oboch súradníc koncových bodov;
+     * voľná (vzdialenejšia) súradnica sa snapuje na mriežku, spoločná (v najbližšom
+     * koncovom bode) ostáva na mieste, aby ohyb neporušil pravouhlosť trasy.
+     */
+    private static void addFreeElbow(List<Point2D> pts, Point2D a, Point2D b, int grid) {
         if (a.getX() != b.getX() && a.getY() != b.getY()) {
-            pts.add(new Point2D(b.getX(), a.getY()));
+            pts.add(new Point2D(snapToGrid(b.getX(), grid), a.getY()));
         }
     }
 
@@ -83,16 +110,16 @@ public final class OrthogonalRouter {
      * Voľný ohyb medzi bodmi a a b. Bez preferencie vedie najprv vodorovne a potom zvislo;
      * s preferenciou TOP/BOTTOM vedie najprv zvislo (kolmo), s LEFT/RIGHT najprv vodorovne.
      */
-    private static void addElbow(List<Point2D> pts, Point2D a, Point2D b, Side preferred) {
+    private static void addElbow(List<Point2D> pts, Point2D a, Point2D b, Side preferred, int grid) {
         if (a.getX() == b.getX() || a.getY() == b.getY()) return;
         if (preferred == Side.TOP || preferred == Side.BOTTOM) {
-            pts.add(new Point2D(a.getX(), b.getY()));
+            pts.add(new Point2D(a.getX(), snapToGrid(b.getY(), grid)));
         } else {
-            pts.add(new Point2D(b.getX(), a.getY()));
+            pts.add(new Point2D(snapToGrid(b.getX(), grid), a.getY()));
         }
     }
 
-    private static void routeFixedToFixed(List<Point2D> pts, Point2D p0, Point2D dir0, Point2D p1, Point2D dir1) {
+    private static void routeFixedToFixed(List<Point2D> pts, Point2D p0, Point2D dir0, Point2D p1, Point2D dir1, int grid) {
         Point2D s0 = p0.add(dir0.multiply(STUB));
         Point2D s1 = p1.add(dir1.multiply(STUB));
         boolean horiz0 = dir0.getX() != 0;
@@ -102,22 +129,25 @@ public final class OrthogonalRouter {
 
         if (horiz0 != horiz1) {
             // kolmé smery - jeden roh, ak sedí znamienko oboch smerov
-            Point2D corner = horiz0 ? new Point2D(s1.getX(), s0.getY()) : new Point2D(s0.getX(), s1.getY());
+            Point2D corner = horiz0
+                    ? new Point2D(snapToGrid(s1.getX(), grid), s0.getY())
+                    : new Point2D(s0.getX(), snapToGrid(s1.getY(), grid));
             if (signMatches(s0, corner, dir0) && signMatches(corner, s1, dir1.multiply(-1))) {
                 pts.add(corner);
             } else {
-                detour(pts, s0, dir0, s1, dir1);
+                detour(pts, s0, dir0, s1, dir1, grid);
             }
         } else {
             // rovnobežné smery - priamka, ak sú zarovnané, inak Z-tvar cez stred
+            // stredová súradnica sa snapuje na mriežku, aby zalomenie ležalo na čiare mriežky
             boolean aligned = horiz0 ? s0.getY() == s1.getY() : s0.getX() == s1.getX();
             if (!aligned) {
                 if (horiz0) {
-                    double midX = (s0.getX() + s1.getX()) / 2.0;
+                    double midX = snapToGrid((s0.getX() + s1.getX()) / 2.0, grid);
                     pts.add(new Point2D(midX, s0.getY()));
                     pts.add(new Point2D(midX, s1.getY()));
                 } else {
-                    double midY = (s0.getY() + s1.getY()) / 2.0;
+                    double midY = snapToGrid((s0.getY() + s1.getY()) / 2.0, grid);
                     pts.add(new Point2D(s0.getX(), midY));
                     pts.add(new Point2D(s1.getX(), midY));
                 }
@@ -134,11 +164,11 @@ public final class OrthogonalRouter {
     }
 
     /** Núdzový obchádzací manéver, keď oba pahýle mieria "od seba". */
-    private static void detour(List<Point2D> pts, Point2D s0, Point2D dir0, Point2D s1, Point2D dir1) {
+    private static void detour(List<Point2D> pts, Point2D s0, Point2D dir0, Point2D s1, Point2D dir1, int grid) {
         Point2D e0 = s0.add(dir0.multiply(STUB));
         Point2D e1 = s1.add(dir1.multiply(STUB));
         pts.add(e0);
-        addFreeElbow(pts, e0, e1);
+        addFreeElbow(pts, e0, e1, grid);
         pts.add(e1);
     }
 

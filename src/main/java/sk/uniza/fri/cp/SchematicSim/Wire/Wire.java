@@ -123,6 +123,9 @@ public class Wire extends HighlightGroup {
                     inProgress.delete();
                 }
                 Pin.finishInProgressWire();
+                if (inProgress.areBothEndsConnected()) {
+                    inProgress.settleToGrid();
+                }
             }
             draggedWire = null;
         }
@@ -347,6 +350,15 @@ public class Wire extends HighlightGroup {
         // spájač polož presne na trasu segmentu, aby sa vodič opticky nerozdelil
         // do dvoch mierne posunutých častí (pri ťahaní z vodiča je bod mimo priamky)
         Point2D snappedPosition = snapToSegment(targetSegment, position);
+
+        // začiatočný bod odbočky sa zarovná na mriežku: najprv na najbližší priesečník
+        // mriežky, potom sa premietne späť na trasu kmeňa, aby nevybočil mimo vodiča
+        // (trasa dokončeného vodiča vedie po čiarach mriežky, preto bod zostane na mriežke)
+        double grid = getSheet().getGrid().getSizeMin();
+        snappedPosition = new Point2D(
+                Math.round(snappedPosition.getX() / grid) * grid,
+                Math.round(snappedPosition.getY() / grid) * grid);
+        snappedPosition = snapToSegment(targetSegment, snappedPosition);
 
         WireJunction junction = new WireJunction(getSheet(), this);
 
@@ -663,6 +675,16 @@ public class Wire extends HighlightGroup {
 
     public boolean areBothEndsConnected() {
         return this.ends[0].isConnected() && this.ends[1].isConnected();
+    }
+
+    /**
+     * Prepočítanie trás všetkých segmentov po dokončení vodiča - zlomy sa tým zarovnajú
+     * na mriežku (pri ťahaní sa zámerne nezarovnávajú, aby pohyb vodiča ostal plynulý).
+     */
+    public void settleToGrid() {
+        for (WireSegment segment : this.segments) {
+            segment.updateGraphics();
+        }
     }
 
     public Joint splitLastSegment() {

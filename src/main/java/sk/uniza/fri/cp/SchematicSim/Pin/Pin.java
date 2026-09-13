@@ -69,10 +69,15 @@ public abstract class Pin extends Group implements Connectable {
 
     private final EventHandler<MouseEvent> onMouseReleased = event -> {
         if (creatingWire != null) {
-            creatingWire.setMouseTransparent(false);
-            creatingWire.setOpacity(1);
-            if (!creatingWire.areBothEndsConnected()) creatingWire.delete();
+            Wire finished = creatingWire;
+            finished.setMouseTransparent(false);
+            finished.setOpacity(1);
             creatingWire = null;
+            if (!finished.areBothEndsConnected()) {
+                finished.delete();
+            } else {
+                finished.settleToGrid();
+            }
         }
         event.consume();
     };

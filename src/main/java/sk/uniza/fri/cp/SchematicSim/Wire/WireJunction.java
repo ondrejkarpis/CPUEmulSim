@@ -78,6 +78,9 @@ public class WireJunction extends Joint implements Connectable {
                 inProgress.delete();
             }
             Pin.finishInProgressWire();
+            if (inProgress.areBothEndsConnected()) {
+                inProgress.settleToGrid();
+            }
             event.consume();
         });
     }

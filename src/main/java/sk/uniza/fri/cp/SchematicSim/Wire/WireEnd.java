@@ -105,6 +105,9 @@ public class WireEnd extends Joint {
                     inProgress.delete();
                 }
                 Pin.finishInProgressWire();
+                if (inProgress.areBothEndsConnected()) {
+                    inProgress.settleToGrid();
+                }
             }
 
             event.consume();

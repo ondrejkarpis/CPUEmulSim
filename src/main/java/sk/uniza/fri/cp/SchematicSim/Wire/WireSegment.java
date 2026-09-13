@@ -4,6 +4,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.Group;
 import javafx.scene.paint.Paint;
 import javafx.scene.shape.Polyline;
+import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.util.List;
 import java.util.stream.Stream;
@@ -66,10 +67,17 @@ public class WireSegment extends Group {
         Point2D p0 = startJoint.getConnectionPoint();
         Point2D p1 = endJoint.getConnectionPoint();
 
+        // zlomy sa snapujú na mriežku až po dokončení vodiča (obidva konce pripojené a vodič
+        // sa práve neťahá); počas ťahania sa trasa počíta plynulo bez snapovania
+        int grid = isSettled() ? wire.getSheet().getGrid().getSizeMin() : 0;
         List<Point2D> path = OrthogonalRouter.route(p0, startJoint.getExitSide(), p1, endJoint.getExitSide(),
-                wire.getBranchExit());
+                wire.getBranchExit(), grid);
 
         applyPath(path);
+    }
+
+    private boolean isSettled() {
+        return this.wire.areBothEndsConnected() && Pin.getInProgressWire() != this.wire;
     }
 
     private void applyPath(List<Point2D> path) {
