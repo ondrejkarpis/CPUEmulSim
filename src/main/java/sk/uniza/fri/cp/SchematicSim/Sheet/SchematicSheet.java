@@ -162,10 +162,25 @@ public class SchematicSheet extends ScrollPane {
 
             if (scaleFactor * scaleTotal.get() >= 0.3 && scaleFactor * scaleTotal.get() <= 3) {
                 Point2D scrollOffset = figureScrollOffset(scrollContent, this);
+
+                //kotva zoomu = poloha kurzora vo viewporte, počítaná v scénovom priestore
+                //(odolná voči rozdielnym súradnicovým systémom obsahu a ScrollPane)
+                Bounds viewport = this.getViewportBounds();
+                Point2D viewportOrigin = this.localToScene(viewport.getMinX(), viewport.getMinY());
+                double anchorX = event.getSceneX() - viewportOrigin.getX();
+                double anchorY = event.getSceneY() - viewportOrigin.getY();
+
+                double oldContentWidth = scrollContent.getLayoutBounds().getWidth();
+                double oldContentHeight = scrollContent.getLayoutBounds().getHeight();
+
                 contentGroup.setScaleX(contentGroup.getScaleX() * scaleFactor);
                 contentGroup.setScaleY(contentGroup.getScaleY() * scaleFactor);
                 scaleTotal.setValue(scaleTotal.doubleValue() * scaleFactor);
-                repositionScroller(scrollContent, this, scaleFactor, scrollOffset);
+
+                //novú veľkosť obsahu dopočítame explicitne - layoutBounds ešte nie je prepočítaný
+                double extraWidth = oldContentWidth * scaleFactor - viewport.getWidth();
+                double extraHeight = oldContentHeight * scaleFactor - viewport.getHeight();
+                repositionScroller(scrollContent, this, scaleFactor, scrollOffset, anchorX, anchorY, extraWidth, extraHeight);
             }
         });
 
@@ -471,21 +486,17 @@ public class SchematicSheet extends ScrollPane {
         return new Point2D(scrollXOffset, scrollYOffset);
     }
 
-    private void repositionScroller(Node scrollContent, ScrollPane scroller, double scaleFactor, Point2D scrollOffset) {
+    private void repositionScroller(Node scrollContent, ScrollPane scroller, double scaleFactor, Point2D scrollOffset, double anchorX, double anchorY, double extraWidth, double extraHeight) {
         double scrollXOffset = scrollOffset.getX();
         double scrollYOffset = scrollOffset.getY();
-        double extraWidth = scrollContent.getLayoutBounds().getWidth() - scroller.getViewportBounds().getWidth();
         if (extraWidth > 0) {
-            double halfWidth = scroller.getViewportBounds().getWidth() / 2;
-            double newScrollXOffset = (scaleFactor - 1) * halfWidth + scaleFactor * scrollXOffset;
+            double newScrollXOffset = (scaleFactor - 1) * anchorX + scaleFactor * scrollXOffset;
             scroller.setHvalue(scroller.getHmin() + newScrollXOffset * (scroller.getHmax() - scroller.getHmin()) / extraWidth);
         } else {
             scroller.setHvalue(scroller.getHmin());
         }
-        double extraHeight = scrollContent.getLayoutBounds().getHeight() - scroller.getViewportBounds().getHeight();
         if (extraHeight > 0) {
-            double halfHeight = scroller.getViewportBounds().getHeight() / 2;
-            double newScrollYOffset = (scaleFactor - 1) * halfHeight + scaleFactor * scrollYOffset;
+            double newScrollYOffset = (scaleFactor - 1) * anchorY + scaleFactor * scrollYOffset;
             scroller.setVvalue(scroller.getVmin() + newScrollYOffset * (scroller.getVmax() - scroller.getVmin()) / extraHeight);
         } else {
             scroller.setVvalue(scroller.getVmin());
