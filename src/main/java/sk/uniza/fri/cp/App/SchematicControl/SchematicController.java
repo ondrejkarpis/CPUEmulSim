@@ -7,7 +7,6 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
-import javafx.scene.control.ColorPicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.ToolBar;
@@ -20,7 +19,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import org.controlsfx.control.ToggleSwitch;
@@ -29,7 +27,6 @@ import sk.uniza.fri.cp.CPUEmul.CPUStates;
 import sk.uniza.fri.cp.SchematicSim.Buses.AddressBus16;
 import sk.uniza.fri.cp.SchematicSim.Buses.ControlBus;
 import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
-import sk.uniza.fri.cp.SchematicSim.DescriptionPane;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Led;
 import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
@@ -42,7 +39,6 @@ import sk.uniza.fri.cp.SchematicSim.Gates.Switch;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
-import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.io.File;
 import java.nio.file.Paths;
@@ -66,7 +62,6 @@ public class SchematicController {
 
     private SchematicSheet sheet;
     private ItemPicker itemPicker;
-    private DescriptionPane descriptionPane;
     private BorderPane root;
 
     private File currentFile;
@@ -93,27 +88,18 @@ public class SchematicController {
 
         //plocha schémy
         this.sheet = new SchematicSheet(SCHEME_WIDTH, SCHEME_HEIGHT, GRID_SIZE);
-        this.descriptionPane = new DescriptionPane();
-        this.sheet.setDescriptionPane(this.descriptionPane);
 
         //paletka súčiastok
         this.itemPicker = new ItemPicker();
-        this.itemPicker.setPanelForDescription(this.descriptionPane);
         registerItems(this.itemPicker);
 
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
         editableArea.setDividerPositions(0.22);
 
-        VBox descriptionBox = new VBox(new Label("Popis"), this.descriptionPane);
-        VBox.setVgrow(this.descriptionPane, Priority.ALWAYS);
-
         this.root = new BorderPane();
         this.root.setTop(buildToolbar());
-
-        BorderPane center = new BorderPane(editableArea);
-        center.setBottom(descriptionBox);
-        this.root.setCenter(center);
+        this.root.setCenter(editableArea);
 
         this.root.setBottom(buildStatusBar());
 
@@ -188,10 +174,6 @@ public class SchematicController {
         Button btnSave = iconButton("Uložiť", "/icons/save.png", () -> handleSaveAction(), "Uložiť schému");
         Button btnSaveAs = iconButton("Uložiť ako", "/icons/save-as.png", () -> handleSaveAsAction(), "Uložiť schému do iného súboru");
 
-        ColorPicker wireColorPicker = new ColorPicker(Wire.getDefaultColor());
-        wireColorPicker.setOnAction(event -> Wire.setDefaultColor(wireColorPicker.getValue()));
-        wireColorPicker.setTooltip(new Tooltip("Farba nových vodičov"));
-
         this.tsPower = new ToggleSwitch();
         this.tsPower.setSelected(false);
         this.tsPower.setTooltip(new Tooltip("Zapnúť / vypnúť simuláciu"));
@@ -211,7 +193,7 @@ public class SchematicController {
         this.btnF12reset = cpuButton("Reset [F12]", "/icons/reset.png");
 
         toolbar.getItems().addAll(btnNew, btnLoad, btnSave, btnSaveAs,
-                new Label(" | "), wireColorPicker,
+                new Label(" | "),
                 new Label("  |  "), new Label("Zapnuté:"), this.tsPower,
                 new Label("  |  "), new Label("Debug:"), this.tsDebug,
                 spacer, this.btnF5spusti, this.btnF7krok, this.btnF9pauza,

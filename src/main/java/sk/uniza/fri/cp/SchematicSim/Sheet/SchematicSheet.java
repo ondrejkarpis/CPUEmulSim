@@ -18,7 +18,6 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
-import sk.uniza.fri.cp.SchematicSim.DescriptionPane;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
@@ -57,7 +56,6 @@ public class SchematicSheet extends ScrollPane {
     private final GridSystem gridSystem;
     private final SheetLayersManager layersManager;
     private GridOccupancy occupancy;
-    private DescriptionPane descriptionPane;
 
     private final ArrayList<Selectable> selected;
     private GateSymbol addingItem;
@@ -360,13 +358,7 @@ public class SchematicSheet extends ScrollPane {
         return layersManager.getLayer("background").getLocalToSceneTransform().getTy();
     }
 
-    public void setDescriptionPane(DescriptionPane descriptionPane) {
-        this.descriptionPane = descriptionPane;
-    }
-
     public boolean addSelect(Selectable item) {
-        if (selected.isEmpty() && descriptionPane != null) descriptionPane.setDescription(item);
-
         if (!selected.contains(item)) {
             item.select();
             return selected.add(item);
@@ -382,7 +374,6 @@ public class SchematicSheet extends ScrollPane {
     public void clearSelect() {
         selected.forEach(Selectable::deselect);
         selected.clear();
-        if (descriptionPane != null) descriptionPane.clear();
     }
 
     public void deleteSelect() {

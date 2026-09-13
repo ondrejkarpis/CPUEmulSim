@@ -19,7 +19,6 @@ public class ItemPicker extends VBox {
 
     private final ScrollPane contentPane;
     private final FlowPane gatesPane;
-    private DescriptionPane descriptionPane;
 
     public ItemPicker() {
         this.contentPane = new ScrollPane();
@@ -43,12 +42,5 @@ public class ItemPicker extends VBox {
         gatesPane.getChildren().add(item);
 
         item.addEventFilter(MouseEvent.DRAG_DETECTED, event -> item.startFullDrag());
-        item.addEventFilter(MouseEvent.MOUSE_CLICKED, event -> {
-            if (this.descriptionPane != null) this.descriptionPane.setDescription(item);
-        });
-    }
-
-    public void setPanelForDescription(DescriptionPane descriptionPane) {
-        this.descriptionPane = descriptionPane;
     }
 }
