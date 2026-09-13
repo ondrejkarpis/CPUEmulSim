@@ -1,6 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Sheet;
 
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.event.Event;
@@ -61,6 +63,9 @@ public class SchematicSheet extends ScrollPane {
     private GateSymbol addingItem;
 
     private boolean hasChanged = false;
+
+    /** Debug-farbenie vodičov podľa logického stavu (Z sivá, 0 modrá, 1 červená). */
+    private final SimpleBooleanProperty debugWires = new SimpleBooleanProperty(false);
 
     private static final double SCALE_DELTA = 1.1;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
@@ -182,6 +187,10 @@ public class SchematicSheet extends ScrollPane {
         });
 
         setupWireToWireHandler();
+
+        this.debugWires.addListener((obs, oldValue, newValue) -> {
+            for (Wire wire : layersManager.getWires()) wire.setDebugColored(newValue);
+        });
     }
 
     /**
@@ -382,6 +391,9 @@ public class SchematicSheet extends ScrollPane {
 
     public boolean addItem(Object item) {
         hasChanged = true;
+        if (item instanceof Wire) {
+            ((Wire) item).setDebugColored(this.debugWires.get());
+        }
         return layersManager.add(item);
     }
 
@@ -438,6 +450,18 @@ public class SchematicSheet extends ScrollPane {
 
     public void addEvent(SheetEvent event) {
         simulator.addEvent(event);
+    }
+
+    public boolean isDebugWires() {
+        return debugWires.get();
+    }
+
+    public void setDebugWires(boolean debug) {
+        debugWires.set(debug);
+    }
+
+    public BooleanProperty debugWiresProperty() {
+        return debugWires;
     }
 
     public Point2D getMousePositionOnGrid(MouseEvent event) {

@@ -4,10 +4,6 @@ import javafx.geometry.Point2D;
 import javafx.scene.Group;
 import javafx.scene.paint.Paint;
 import javafx.scene.shape.Polyline;
-import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
-import javafx.scene.text.Text;
-import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 
 import java.util.List;
 import java.util.stream.Stream;
@@ -26,7 +22,6 @@ public class WireSegment extends Group {
     private Joint startJoint;
     private Joint endJoint;
     private final Polyline line = new Polyline();
-    private final Text stateLabel = new Text("Z");
 
     WireSegment(Wire wire, Joint start, Joint end) {
         this(wire, start, end, null);
@@ -49,12 +44,9 @@ public class WireSegment extends Group {
 
         this.line.setStrokeWidth(6);
         this.line.setFill(null);
-        this.line.setStroke(wire.getColor());
+        this.line.setStroke(wire.getCurrentColor());
         this.line.setOpacity(1);
-        this.stateLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
-        this.stateLabel.setMouseTransparent(true);
         this.getChildren().add(line);
-        this.getChildren().add(stateLabel);
 
         // na rozdiel od originálu (priama väzba property-bindingom) tu trasa nie je lineárna
         // funkcia koncových bodov, preto počúvame na zmenu polohy a prepočítavame ju ručne
@@ -65,7 +57,6 @@ public class WireSegment extends Group {
 
         if (path != null) {
             applyPath(path);
-            updateStateLabel();
         } else {
             updateGraphics();
         }
@@ -79,48 +70,11 @@ public class WireSegment extends Group {
                 wire.getBranchExit());
 
         applyPath(path);
-        updateStateLabel();
     }
 
     private void applyPath(List<Point2D> path) {
         Double[] flat = path.stream().flatMap(p -> Stream.of(p.getX(), p.getY())).toArray(Double[]::new);
         line.getPoints().setAll(flat);
-    }
-
-    void updateStateLabel() {
-        List<Double> points = line.getPoints();
-        if (points.size() < 4) return;
-
-        double longestLength = -1;
-        double labelX = points.get(0);
-        double labelY = points.get(1);
-        boolean horizontal = true;
-        for (int index = 2; index < points.size(); index += 2) {
-            double x1 = points.get(index - 2);
-            double y1 = points.get(index - 1);
-            double x2 = points.get(index);
-            double y2 = points.get(index + 1);
-            double length = Math.abs(x2 - x1) + Math.abs(y2 - y1);
-            if (length > longestLength) {
-                longestLength = length;
-                labelX = (x1 + x2) / 2;
-                labelY = (y1 + y2) / 2;
-                horizontal = Math.abs(x2 - x1) >= Math.abs(y2 - y1);
-            }
-        }
-
-        double labelWidth = stateLabel.getLayoutBounds().getWidth();
-        double labelHeight = stateLabel.getLayoutBounds().getHeight();
-        if (horizontal) {
-            stateLabel.relocate(labelX - labelWidth / 2, labelY - labelHeight - 4);
-        } else {
-            stateLabel.relocate(labelX + 6, labelY - labelHeight / 2);
-        }
-    }
-
-    void setState(Potential.Value value) {
-        stateLabel.setText(value == Potential.Value.HIGH ? "1" : value == Potential.Value.LOW ? "0" : "Z");
-        updateStateLabel();
     }
 
     public Wire getWire() {

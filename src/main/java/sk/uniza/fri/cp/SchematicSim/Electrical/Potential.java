@@ -191,9 +191,12 @@ public class Potential {
 
         if (this.shortCircuit && this.child == null) this.highlightShortCircuitNodes();
 
-        if (this.child != null) return this.child.setValue(this.value);
-
+        // notifikujeme vždy, nielen keď sme list (child == null) - potenciál vložený do
+        // stredu siete (napr. kmeňový vodič, z ktorého vedie odbočka) je internal node
+        // a zmena hodnoty by ho inak obišla a jeho poslucháč by sa nikdy neozval
         notifyValueListeners();
+
+        if (this.child != null) return this.child.setValue(this.value);
 
         return !this.shortCircuit;
     }

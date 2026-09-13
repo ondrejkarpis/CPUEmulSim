@@ -1,8 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Wire;
 
+import javafx.application.Platform;
 import javafx.event.Event;
 import javafx.event.EventHandler;
-import javafx.application.Platform;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
@@ -38,23 +38,17 @@ public class Wire extends HighlightGroup {
 
     private static Color defaultColor = Color.BLACK;
 
+    // debug farby podľa logického stavu vodiča: Z - sivá, 0 - modrá, 1 - červená
+    private static final Color DEBUG_Z_COLOR = Color.GRAY;
+    private static final Color DEBUG_LOW_COLOR = Color.BLUE;
+    private static final Color DEBUG_HIGH_COLOR = Color.RED;
+
     private Color color;
     private Potential potential;
-    private volatile boolean labelUpdateScheduled;
+    private boolean debugColored;
+    private volatile boolean colorRefreshScheduled;
 
-    // pri kontinuálnom behu simulácie by každá zmena potenciálu vytvorila samostatnú runLater
-    // úlohu a FX vlákno by nestíhalo vyprázdňovať rad -> aplikácia (napr. klávesa F10) by nereagovala.
-    // Zmeny preto skoalescujeme do jednej čakajúcej úlohy - vykoná sa len najnovší stav.
-    private final Runnable potentialValueListener = () -> scheduleStateLabelRefresh();
-
-    private void scheduleStateLabelRefresh() {
-        if (labelUpdateScheduled) return;
-        labelUpdateScheduled = true;
-        Platform.runLater(() -> {
-            labelUpdateScheduled = false;
-            refreshStateLabel();
-        });
-    }
+    private final Runnable debugColorListener = this::refreshDebugColors;
 
     private final WireEnd[] ends;
     private final List<Joint> joints;
@@ -249,13 +243,57 @@ public class Wire extends HighlightGroup {
 
     public void changeColor(Color newColor) {
         this.color = newColor;
-        this.segments.forEach(segment -> segment.setColor(this.color));
+        this.refreshSegmentColors();
         for (WireEnd end : this.ends) end.setDefaultColor();
         if (this.isSelected()) this.highlightSegments(1);
     }
 
     public Color getColor() {
         return this.color;
+    }
+
+    /**
+     * Zapnutie/vypnutie debug-farbenia vodiča podľa logického stavu potenciálu.
+     * Pri prekreslení sa použije pôvodná (užívateľská) farba alebo debug-farba podľa stavu.
+     */
+    public void setDebugColored(boolean enabled) {
+        this.debugColored = enabled;
+        if (this.potential != null) {
+            if (enabled) this.potential.addValueListener(this.debugColorListener);
+            else this.potential.removeValueListener(this.debugColorListener);
+        }
+        this.refreshSegmentColors();
+    }
+
+    /**
+     * Skoalescovaná obnova farieb pri zmene potenciálu - pri kontinuálnom behu simulácie
+     * by každá zmena potenciálu inak vytvorila samostatnú runLater úlohu a FX vlákno by
+     * nestíhalo vyprázdňovať rad. Spraví sa len najnovší stav.
+     */
+    private void refreshDebugColors() {
+        if (!this.debugColored) return;
+        if (this.colorRefreshScheduled) return;
+        this.colorRefreshScheduled = true;
+        Platform.runLater(() -> {
+            this.colorRefreshScheduled = false;
+            if (this.debugColored) this.refreshSegmentColors();
+        });
+    }
+
+    private void refreshSegmentColors() {
+        Color target = this.getCurrentColor();
+        this.segments.forEach(segment -> segment.setColor(target));
+    }
+
+    /** Aktuálne používaná farba segmentov - debug-farba podľa stavu alebo užívateľská farba. */
+    Color getCurrentColor() {
+        if (!this.debugColored) return this.color;
+        if (this.potential == null) return DEBUG_Z_COLOR;
+        switch (this.potential.getValue()) {
+            case HIGH: return DEBUG_HIGH_COLOR;
+            case LOW: return DEBUG_LOW_COLOR;
+            default: return DEBUG_Z_COLOR;
+        }
     }
 
     public WireEnd[] getEnds() {
@@ -696,7 +734,7 @@ public class Wire extends HighlightGroup {
      */
     void updatePotential() {
         if (this.potential != null) {
-            this.potential.removeValueListener(potentialValueListener);
+            this.potential.removeValueListener(this.debugColorListener);
             this.potential.delete();
             this.potential = null;
         }
@@ -708,7 +746,7 @@ public class Wire extends HighlightGroup {
 
             if (start != null && end != null) {
                 this.potential = new Potential(start, end);
-                this.potential.addValueListener(potentialValueListener);
+                if (this.debugColored) this.potential.addValueListener(this.debugColorListener);
                 toUpdate = start;
             } else {
                 toUpdate = start != null ? start : end;
@@ -718,7 +756,7 @@ public class Wire extends HighlightGroup {
                 getSheet().addEvent(new SheetEvent(toUpdate));
             }
         }
-        refreshStateLabel();
+        this.refreshSegmentColors();
     }
 
     /**
@@ -728,11 +766,6 @@ public class Wire extends HighlightGroup {
         if (end.getPin() != null) return end.getPin();
         if (end.getJunction() != null) return end.getJunction().findConnectedPin();
         return null;
-    }
-
-    private void refreshStateLabel() {
-        Potential.Value value = this.potential == null ? Potential.Value.NC : this.potential.getValue();
-        this.segments.forEach(segment -> segment.setState(value));
     }
 
     @Override

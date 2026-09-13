@@ -72,6 +72,7 @@ public class SchematicController {
     private File currentFile;
 
     private ToggleSwitch tsPower;
+    private ToggleSwitch tsDebug;
     private Button btnF5spusti;
     private Button btnF7krok;
     private Button btnF9pauza;
@@ -195,6 +196,11 @@ public class SchematicController {
         this.tsPower.setSelected(false);
         this.tsPower.setTooltip(new Tooltip("Zapnúť / vypnúť simuláciu"));
 
+        this.tsDebug = new ToggleSwitch();
+        this.tsDebug.setSelected(false);
+        this.tsDebug.setTooltip(new Tooltip("Prefarbiť vodiče podľa logického stavu (Z sivá, 0 modrá, 1 červená)"));
+        this.tsDebug.selectedProperty().addListener((obs, oldValue, newValue) -> this.sheet.setDebugWires(newValue));
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
@@ -207,6 +213,7 @@ public class SchematicController {
         toolbar.getItems().addAll(btnNew, btnLoad, btnSave, btnSaveAs,
                 new Label(" | "), wireColorPicker,
                 new Label("  |  "), new Label("Zapnuté:"), this.tsPower,
+                new Label("  |  "), new Label("Debug:"), this.tsDebug,
                 spacer, this.btnF5spusti, this.btnF7krok, this.btnF9pauza,
                 this.btnF10stop, this.btnF12reset);
 
