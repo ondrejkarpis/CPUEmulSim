@@ -36,8 +36,8 @@ public class MatrixKeyboard extends GateSymbol {
 
     private Pin[] pinIn;
     private Pin[] pinOut;
-    private final Circle[][] keyPlungers = new Circle[ROWS][COLS];
-    private final boolean[][] latched = new boolean[ROWS][COLS];
+    private final Circle[][] keyPlungers;
+    private final boolean[][] latched;
 
     private volatile int pressedRow = -1;
     private volatile int pressedCol = -1;
@@ -54,6 +54,11 @@ public class MatrixKeyboard extends GateSymbol {
 
     @Override
     protected List<Pin> createPins() {
+        // pole sa MUSIA vytvoriť tu, nie ako inštancové inicializátory - drawBody() sa volá
+        // z konštruktora GateSymbol ešte PRED spustením inštancových inicializátorov
+        keyPlungers = new Circle[ROWS][COLS];
+        latched = new boolean[ROWS][COLS];
+
         List<Pin> pins = new ArrayList<>(ROWS + COLS);
         pinIn = new Pin[ROWS];
         for (int row = 0; row < ROWS; row++) {
