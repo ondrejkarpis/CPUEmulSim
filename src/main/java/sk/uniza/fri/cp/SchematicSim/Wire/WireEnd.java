@@ -116,6 +116,14 @@ public class WireEnd extends Joint {
         this.incRadius();
     }
 
+    /**
+     * Segment vodiča pripojený priamo na tento koniec - používa ho {@link WireJunction}
+     * na určenie smeru kmeňa pri ťahaní odbočky zo spájača.
+     */
+    WireSegment getWireSegmentForJunction() {
+        return getPrimaryWireSegment() != null ? getPrimaryWireSegment() : getSecondaryWireSegment();
+    }
+
     public boolean isConnected() {
         return this.pin != null || this.junction != null;
     }

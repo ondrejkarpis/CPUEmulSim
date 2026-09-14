@@ -274,16 +274,66 @@ public class WireJunction extends Joint implements Connectable {
      * a odbočka má ísť hore/dole, hoci celý segment je celkovo zvislý.
      */
     public Side branchExitFor(double mouseX, double mouseY) {
-        WireSegment trunk = getPrimaryWireSegment() != null ? getPrimaryWireSegment() : getSecondaryWireSegment();
+        WireSegment trunk = findTrunkSegment();
         if (trunk == null) return null;
 
-        if (isLastPieceHorizontal(trunk)) {
+        if (isTrunkSegmentHorizontal(trunk)) {
             return mouseY < getLayoutY() ? Side.TOP : Side.BOTTOM;
         }
         return mouseX < getLayoutX() ? Side.LEFT : Side.RIGHT;
     }
 
-    /** {@code true} ak je lokálny smer kmeňa v mieste spájača vodorovný. */
+    /**
+     * Nájde segment kmeňa tesne pri tomto spájači. V novom modeli sú kmeňové vodiče na spájač
+     * napojené cez {@link WireEnd} (kmeň sa v spájači rozdeľuje na dva vodiče), preto sa segment
+     * hľadá cez napojené konce - nie cez vlastné {@code wireSegments}, ktoré sa plnia len priamym
+     * (legacy) spojením segmentu so spájačom. Koniec rozpracovanej odbočky sa preskakuje, aby sa
+     * smer neurčoval z odbočky samej, ale z kmeňa.
+     */
+    private WireSegment findTrunkSegment() {
+        Wire inProgress = Pin.getInProgressWire();
+        for (WireEnd end : this.connectedEnds) {
+            if (inProgress != null && end.getWire() == inProgress) continue;
+            WireSegment seg = end.getWireSegmentForJunction();
+            if (seg != null) return seg;
+        }
+        // legacy: segmenty registrované priamo na spájači
+        if (getPrimaryWireSegment() != null) return getPrimaryWireSegment();
+        return getSecondaryWireSegment();
+    }
+
+    /**
+     * {@code true} ak je lokálny smer kmeňa v mieste spájača vodorovný. Rozhoduje úsečka trasy
+     * tesne pri konci, ktorý sa dotýka spájača: pri {@code startJoint} je to prvá úsečka trasy,
+     * pri {@code endJoint} zase posledná.
+     */
+    private boolean isTrunkSegmentHorizontal(WireSegment segment) {
+        for (WireEnd end : this.connectedEnds) {
+            if (end.getWireSegmentForJunction() != segment) continue;
+            if (segment.getStartJoint() == end) return isFirstPieceHorizontal(segment);
+            if (segment.getEndJoint() == end) return isLastPieceHorizontal(segment);
+        }
+        return isLastPieceHorizontal(segment);
+    }
+
+    /** {@code true} ak je prvá úsečka trasy segmentu vodorovná (úsečka opúšťajúca spájač). */
+    private static boolean isFirstPieceHorizontal(WireSegment segment) {
+        List<Double> points = segment.getRoutedPoints();
+        for (int i = 0; i + 3 < points.size(); i += 2) {
+            double x1 = points.get(i);
+            double y1 = points.get(i + 1);
+            double x2 = points.get(i + 2);
+            double y2 = points.get(i + 3);
+            double lenX = Math.abs(x2 - x1);
+            double lenY = Math.abs(y2 - y1);
+            if (lenX == 0 && lenY == 0) continue;
+            return lenX >= lenY;
+        }
+        // žiadna použiteľná trasa - pôvodná heuristika z celkového rozsahu segmentu
+        return Math.abs(segment.getEndX() - segment.getStartX()) >= Math.abs(segment.getEndY() - segment.getStartY());
+    }
+
+    /** {@code true} ak je posledná úsečka trasy segmentu vodorovná (úsečka vchádzajúca do spájača). */
     private static boolean isLastPieceHorizontal(WireSegment segment) {
         List<Double> points = segment.getRoutedPoints();
         for (int i = points.size() - 4; i >= 0; i -= 2) {
