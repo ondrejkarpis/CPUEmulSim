@@ -31,6 +31,7 @@ public class WireJunction extends Joint implements Connectable {
     private final List<WireEnd> connectedEnds = new ArrayList<>();
     private final Circle junctionDot;
     private final Circle colorizerDot;
+    private final double baseRadius;
 
     /**
      * Vodič, ktorý spájač obýva (v novom modeli je spájač hraničným bodom dvoch vodičov -
@@ -46,6 +47,7 @@ public class WireJunction extends Joint implements Connectable {
 
         GridSystem grid = getSheet().getGrid();
         double r = grid.getSizeMin() / 3.7;
+        this.baseRadius = r;
 
         this.junctionDot = new Circle(0, 0, r, FILL_COLOR);
         this.colorizerDot = new Circle(0, 0, r * 1.3, Color.RED);
@@ -54,6 +56,10 @@ public class WireJunction extends Joint implements Connectable {
 
         this.getChildren().add(this.junctionDot);
         this.getChildren().add(this.colorizerDot);
+
+        // zvýraznenie bodu pri nájazde kurzora - signalizuje, že sa dá uchopiť a presunúť
+        this.addEventFilter(MouseEvent.MOUSE_ENTERED, event -> this.junctionDot.setRadius(this.baseRadius * 1.2));
+        this.addEventFilter(MouseEvent.MOUSE_EXITED, event -> this.junctionDot.setRadius(this.baseRadius));
 
         registerWireStartHandlers();
     }
@@ -78,20 +84,46 @@ public class WireJunction extends Joint implements Connectable {
     void markRemoved() {
         this.removed = true;
     }
+/**
+     * Spájač, ktorý sa práve presúva myšou (null, ak žiadny) - potrebné pre routing bez
+     * snapovania počas ťahania.
+     */
+    private static WireJunction draggingJunction;
+
+    static boolean isAnyJunctionDragged() {
+        return draggingJunction != null;
+    }
 
     /**
-     * Umožňuje začínať nový vodič priamo ťahaním z tohto spájača (malý plný krúžok).
-     * Vytvorí sa rozpracovaný vodič, ktorý sa končí na spájači a ťahá sa za kurzorom.
+     * Umožňuje začínať nový vodič priamo ťahaním z tohto spájača (Ctrl+ťah, malý plný krúžok)
+     * a presúvať spájač prostým ťahaním myšou (pripojené vodiče sa automaticky preroutujú).
      */
     private void registerWireStartHandlers() {
         this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
             if (!event.isPrimaryButtonDown()) return;
-            Pin.beginWireCreation(this);
+            if (event.isShortcutDown()) {
+                // Ctrl+ťah = spustenie novej odbočky zo spájača
+                Pin.beginWireCreation(this);
+                this.startFullDrag();
+                event.consume();
+                return;
+            }
+
+            // prostý ťah = presun spájača (body vodičov sa aktuálne vykreslú nelícne)
+            draggingJunction = this;
             this.startFullDrag();
             event.consume();
         });
 
         this.addEventFilter(MouseEvent.MOUSE_DRAGGED, event -> {
+            if (draggingJunction == this) {
+                Point2D sheet = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
+                setLayoutX(sheet.getX());
+                setLayoutY(sheet.getY());
+                event.consume();
+                return;
+            }
+
             Wire inProgress = Pin.getInProgressWire();
             if (inProgress != null) {
                 Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
@@ -101,6 +133,13 @@ public class WireJunction extends Joint implements Connectable {
         });
 
         this.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
+            if (draggingJunction == this) {
+                draggingJunction = null;
+                finishJunctionDrag();
+                event.consume();
+                return;
+            }
+
             Wire inProgress = Pin.getInProgressWire();
             if (inProgress == null) return;
 
@@ -115,6 +154,22 @@ public class WireJunction extends Joint implements Connectable {
             }
             event.consume();
         });
+    }
+
+    /** Zarovnanie presunutého spájača na mriežku a prepočet trás pripojených vodičov. */
+    private void finishJunctionDrag() {
+        GridSystem grid = getSheet().getGrid();
+        double size = grid.getSizeMin();
+        setLayoutX(Math.round(getLayoutX() / size) * size);
+        setLayoutY(Math.round(getLayoutY() / size) * size);
+
+        for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
+            Wire wire = end.getWire();
+            if (wire != null) {
+                wire.settleToGrid();
+                wire.updatePotential();
+            }
+        }
     }
 
     @Override

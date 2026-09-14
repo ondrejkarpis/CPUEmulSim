@@ -77,7 +77,8 @@ public class WireSegment extends Group {
     }
 
     private boolean isSettled() {
-        return this.wire.areBothEndsConnected() && Pin.getInProgressWire() != this.wire;
+        return this.wire.areBothEndsConnected() && Pin.getInProgressWire() != this.wire
+                && !WireJunction.isAnyJunctionDragged();
     }
 
     private void applyPath(List<Point2D> path) {

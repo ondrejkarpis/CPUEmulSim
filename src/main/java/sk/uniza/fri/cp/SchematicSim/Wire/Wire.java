@@ -932,7 +932,13 @@ public class Wire extends HighlightGroup {
 
         this.jointsGroup.getChildren().clear();
         this.jointsGroup.getChildren().addAll(this.ends[0], this.ends[1]);
-        for (WireJunction hub : this.hubs) this.jointsGroup.getChildren().add(hub);
+
+        // zvýraznenia a výber odkazujú na staré segmenty, ktoré sa práve rušia - odstránime ich,
+        // aby po rekonštrukcii vodiča (createJunction) nezostala visieť biela čiarkovaná čiara
+        // nad novým vodičom
+        this.unhighlightSegments();
+        this.selectedSegment = null;
+        this.hoveredSegment = null;
     }
 
     /**
@@ -968,18 +974,17 @@ public class Wire extends HighlightGroup {
     }
 
     /**
-     * Registrácia spájača (hub) do tohto vodiča: spájač sa stane potomkom {@code jointsGroup}
-     * a vodič ho obýva (zodpovedá za jeho vykreslenie). Pri znovu-obývaní sa premiestni node.
+     * Registrácia spájača (hub) do tohto vodiča. Spájač sa vykresľuje v samostatnej vrstve
+     * NAVRCHU schémy (nie v {@code jointsGroup}), aby nebol prekrytý neskôr pridanými vodičmi
+     * a dal sa uchopiť myšou. Vodič spájač iba "obýva" (zodpovedá zaň) cez {@code hubs}.
      */
     void registerHub(WireJunction hub) {
         if (hub == null) return;
         if (!this.hubs.contains(hub)) this.hubs.add(hub);
         hub.setHostWire(this);
-        if (hub.getParent() != this.jointsGroup) {
-            if (hub.getParent() != null) {
-                ((Group) hub.getParent()).getChildren().remove(hub);
-            }
-            this.jointsGroup.getChildren().add(hub);
+        Pane junctionsLayer = getSheet().getJunctionsLayer();
+        if (hub.getParent() != junctionsLayer) {
+            junctionsLayer.getChildren().add(hub);
         }
     }
 
@@ -1164,8 +1169,8 @@ public class Wire extends HighlightGroup {
         if (junction == null || junction.isRemoved()) return;
         junction.markRemoved();
 
-        if (junction.getParent() != null) {
-            ((Group) junction.getParent()).getChildren().remove(junction);
+        if (junction.getParent() instanceof Pane) {
+            ((Pane) junction.getParent()).getChildren().remove(junction);
         }
         for (Wire wire : new ArrayList<>(attachedWiresOf(junction))) {
             wire.hubs.remove(junction);

@@ -338,6 +338,14 @@ public class SchematicSheet extends ScrollPane {
         return gridSystem;
     }
 
+    /**
+     * Vrstva spájačov (WireJunction) - na vrchu všetkých vrstiev, aby boli čierne body
+     * vždy viditeľné a uchopiteľné myšou aj cez neskôr pridané vodiče.
+     */
+    public Pane getJunctionsLayer() {
+        return layersManager.getJunctionsLayer();
+    }
+
     public GridOccupancy getOccupancy() {
         return occupancy;
     }

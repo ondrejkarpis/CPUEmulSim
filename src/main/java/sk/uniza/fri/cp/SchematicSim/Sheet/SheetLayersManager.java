@@ -12,8 +12,9 @@ import java.util.List;
 
 /**
  * Správca vrstiev plochy schémy. Nahrádza {@code BoardLayersManager} z BreadboardSim -
- * narozdiel od neho má iba 3 vrstvy (pozadie, súčiastky, vodiče), pretože odpadá
- * samostatná vrstva komponentov/breadboardov.
+ * narozdiel od neho má iba 4 vrstvy (pozadie, súčiastky, vodiče, spájače).
+ * Spájače majú samostatnú vrstvu NAVRCHU (nad vodičmi), aby boli vždy viditeľné
+ * a uchopiteľné myšou - inak by ich prekrývali polygony neskôr pridaných vodičov.
  *
  * @author Tomáš Hianik (pôvodný autor BoardLayersManager), adaptácia pre SchematicSim
  */
@@ -24,6 +25,7 @@ public class SheetLayersManager {
     private final Pane backgroundLayer;
     private final Pane gatesLayer;
     private final Pane wiresLayer;
+    private final Pane junctionsLayer;
 
     private final ArrayList<GateSymbol> gates;
     private final ArrayList<Wire> wires;
@@ -32,16 +34,18 @@ public class SheetLayersManager {
         this.backgroundLayer = background;
         this.gatesLayer = new Pane();
         this.wiresLayer = new Pane();
+        this.junctionsLayer = new Pane();
         this.gates = new ArrayList<>();
         this.wires = new ArrayList<>();
 
         this.gatesLayer.setMinWidth(this.backgroundLayer.getBoundsInParent().getWidth());
         this.gatesLayer.setMinHeight(this.backgroundLayer.getBoundsInParent().getHeight());
 
-        this.layers = new Group(backgroundLayer, gatesLayer, wiresLayer);
+        this.layers = new Group(backgroundLayer, gatesLayer, wiresLayer, junctionsLayer);
 
         this.gatesLayer.setPickOnBounds(false);
         this.wiresLayer.setPickOnBounds(false);
+        this.junctionsLayer.setPickOnBounds(false);
     }
 
     private int getGateId() {
@@ -109,8 +113,13 @@ public class SheetLayersManager {
             case "background": return backgroundLayer;
             case "gates": return gatesLayer;
             case "wires": return wiresLayer;
+            case "junctions": return junctionsLayer;
         }
         return backgroundLayer;
+    }
+
+    Pane getJunctionsLayer() {
+        return junctionsLayer;
     }
 
     Group getLayers() {
