@@ -62,12 +62,6 @@ public class Wire extends HighlightGroup {
     // rozpracovaný vodič začatý ťahaním priamo zo segmentu tohto vodiča
     private Wire draggedWire;
 
-    // segment, nad ktorým je práve kurzor (ak žiadny, null)
-    private WireSegment hoveredSegment;
-
-    // segment zvolený kliknutím - zvýrazní sa len on, nie celý vodič
-    private WireSegment selectedSegment;
-
     /** Spájače založené len pre ťahaný vodič; pri zrušení ťahu sa odstránia. */
     private final List<WireJunction> startJunctions = new ArrayList<>();
 
@@ -120,34 +114,6 @@ public class Wire extends HighlightGroup {
         return null;
     }
 
-    /** Najde {@link Joint} (spájač/koniec vodiča) v rodičovskej reťazi prekliknutého uzla. */
-    private static Joint findJointTarget(Object target) {
-        Node node = target instanceof Node ? (Node) target : null;
-        while (node != null) {
-            if (node instanceof Joint) return (Joint) node;
-            node = node.getParent();
-        }
-        return null;
-    }
-
-    /**
-     * Segment vodiča pre zvolený uzol pod kurzorom: priamy segment pod kurzorom, alebo ak je
-     * kurzor nad spájačom/zlomom, jeden z jeho segmentov patriacich tomuto vodiču.
-     */
-    private WireSegment segmentForTarget(Object target) {
-        WireSegment segment = findSegmentTarget(target);
-        if (segment != null) return segment;
-
-        Joint joint = findJointTarget(target);
-        if (joint != null) {
-            for (int i = 0; i < 2; i++) {
-                WireSegment seg = i == 0 ? joint.getPrimaryWireSegment() : joint.getSecondaryWireSegment();
-                if (seg != null && seg.getWire() == this) return seg;
-            }
-        }
-        return null;
-    }
-
     private final EventHandler<MouseEvent> onMouseDragged = event -> {
         if (event.isPrimaryButtonDown() && draggedWire != null) {
             Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
@@ -176,10 +142,8 @@ public class Wire extends HighlightGroup {
     };
 
     private final EventHandler<MouseEvent> onMouseEntered = event -> {
-        this.hoveredSegment = segmentForTarget(event.getTarget());
         if (!this.isSelected()) {
-            if (this.hoveredSegment != null) this.highlightSegment(this.hoveredSegment, 0.7);
-            else this.unhighlightSegments();
+            this.highlightSegments(0.7);
         }
         Color brighter = color.brighter();
         this.setStyle("-fx-effect: dropshadow(gaussian, rgb("
@@ -188,7 +152,6 @@ public class Wire extends HighlightGroup {
 
     private final EventHandler<MouseEvent> onMouseExited = event -> {
         if (!this.isSelected()) {
-            this.hoveredSegment = null;
             this.unhighlightSegments();
         }
         this.setStyle("-fx-effect: none");
@@ -300,8 +263,7 @@ public class Wire extends HighlightGroup {
         this.refreshSegmentColors();
         for (WireEnd end : this.ends) end.setDefaultColor();
         if (this.isSelected()) {
-            if (this.selectedSegment != null) this.highlightSegment(this.selectedSegment, 1);
-            else this.highlightSegments(1);
+            this.highlightSegments(1);
         }
     }
 
@@ -937,8 +899,6 @@ public class Wire extends HighlightGroup {
         // aby po rekonštrukcii vodiča (createJunction) nezostala visieť biela čiarkovaná čiara
         // nad novým vodičom
         this.unhighlightSegments();
-        this.selectedSegment = null;
-        this.hoveredSegment = null;
     }
 
     /**
@@ -1441,23 +1401,21 @@ public class Wire extends HighlightGroup {
     public void select() {
         super.select();
         if (!this.isSelectable()) return;
-        if (this.hoveredSegment != null) {
-            this.selectedSegment = this.hoveredSegment;
-            this.highlightSegment(this.selectedSegment, 1);
-        } else {
-            this.highlightSegments(1);
-        }
+        this.highlightSegments(1);
     }
 
     @Override
     public void deselect() {
         super.deselect();
-        this.selectedSegment = null;
         this.unhighlightSegments();
     }
 
     private final ArrayList<Shape> selectionShapes = new ArrayList<>();
 
+    /**
+     * Zvýraznenie celého vodiča (všetkých segmentov) čiarkovanou čiarou - používa sa pri
+     * výbere kliknutím aj pri premýšaní kurzora.
+     */
     private void highlightSegments(double opacity) {
         this.unhighlightSegments();
 
@@ -1474,26 +1432,6 @@ public class Wire extends HighlightGroup {
             this.selectionShapes.add(highlight);
             this.getChildren().add(highlight);
         });
-    }
-
-    /**
-     * Zvýraznenie iba jedného segmentu vodiča - používa sa pri výbere kliknutím aj pri
-     * premýšaní kurzora, aby sa nezvýrazňoval celý vodič, ale len segment pod kurzorom.
-     */
-    private void highlightSegment(WireSegment segment, double opacity) {
-        this.unhighlightSegments();
-
-        javafx.scene.shape.Polyline highlight = new javafx.scene.shape.Polyline();
-        highlight.getPoints().setAll(segment.getRoutedPoints());
-        for (double value : STROKE_DASH_ARRAY) highlight.getStrokeDashArray().add(value);
-        highlight.setStrokeWidth(1.5);
-        highlight.setStroke(this.getColor().invert());
-        highlight.setStrokeLineCap(StrokeLineCap.ROUND);
-        highlight.setOpacity(opacity);
-        highlight.setMouseTransparent(true);
-
-        this.selectionShapes.add(highlight);
-        this.getChildren().add(highlight);
     }
 
     private void unhighlightSegments() {
