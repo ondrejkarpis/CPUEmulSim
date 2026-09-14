@@ -1,14 +1,11 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
-import javafx.geometry.VPos;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
@@ -20,11 +17,12 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Momentové tlačidlo - v kľude je výstup {@code O} (slabý push/pull so slabým pull-upom)
+ * Tlačidlo - v kľude je výstup {@code O} (slabý push/pull so slabým pull-upom)
  * na logickej 1, po stlačení sa vstup {@code I} behaviorálne prepája na výstup: ak je vstup
- * v logickej 0, výstup sa pretiahne na 0, inak zostane 1. Vývod {@code O} je typu
- * {@link PinType#WEAK_OUT} - na spoločnej sieti ho vždy pretiahne silný (push-pull) výstup,
- * takže tlačidlo nemôže spôsobiť skrat.
+ * v logickej 0, výstup sa pretiahne na 0, inak zostane 1. Ľavým tlačidlom myši sa tlačidlo
+ * stláča momentovo (stlač a drž), pravým tlačidlom sa stav trvalo prepne (toggle).
+ * Vývod {@code O} je typu {@link PinType#WEAK_OUT} - na spoločnej sieti ho vždy pretiahne
+ * silný (push-pull) výstup, takže tlačidlo nemôže spôsobiť skrat.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
@@ -36,7 +34,6 @@ public class PushButton extends GateSymbol {
     private Pin pinIn;
     private Pin pinOut;
     private Circle plunger;
-    private Text valueText;
 
     private volatile boolean pressed = false;
 
@@ -70,13 +67,16 @@ public class PushButton extends GateSymbol {
         body.setStroke(Color.GRAY);
         body.setStrokeWidth(1.5);
 
-        // otlačené tlačidlo - stlačením mení farbu, pustenie ho vráti do kľudu
-        plunger = new Circle(w / 2.0, h / 2.0, cell * 0.45, Color.WHITE);
-        plunger.setStroke(Color.BLACK);
+        // otlačené tlačidlo - ľavým tlačidlom stlač a drž, pustením sa vráti do kľudu;
+        // pravým tlačidlom sa stav trvalo prepne (toggle)
+        plunger = new Circle(w / 2.0, h / 2.0, cell * 0.6, Color.BLACK);
+        plunger.setStroke(Color.WHITE);
         plunger.setStrokeWidth(1.5);
         plunger.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
                 setPressedState(true);
+            } else if (event.getButton() == MouseButton.SECONDARY) {
+                setPressedState(!pressed);
             }
         });
         plunger.setOnMouseReleased(event -> {
@@ -85,14 +85,7 @@ public class PushButton extends GateSymbol {
             }
         });
 
-        valueText = new Text("1");
-        valueText.setTextOrigin(VPos.CENTER);
-        valueText.setLayoutY(h / 2.0 + cell * 0.75);
-        valueText.setFont(Font.font(cell * 0.4));
-        valueText.setMouseTransparent(true);
-        valueText.setLayoutX(w / 2.0 - valueText.getBoundsInLocal().getWidth() / 2.0);
-
-        return new Pane(body, plunger, valueText);
+        return new Pane(body, plunger);
     }
 
     @Override
@@ -136,19 +129,12 @@ public class PushButton extends GateSymbol {
     private volatile boolean visualUpdateScheduled;
 
     private void refreshVisual() {
-        if (plunger == null || valueText == null || visualUpdateScheduled) return;
+        if (plunger == null || visualUpdateScheduled) return;
         visualUpdateScheduled = true;
         Platform.runLater(() -> {
             visualUpdateScheduled = false;
-            plunger.setFill(pressed ? Color.DARKGRAY : Color.WHITE);
-            String text = pinOut != null && pinOut.getState() == Pin.PinState.LOW ? "0" : "1";
-            valueText.setText(text);
-            valueText.setLayoutX(wCenter() - valueText.getBoundsInLocal().getWidth() / 2.0);
+            plunger.setFill(pressed ? Color.DARKGRAY : Color.BLACK);
         });
-    }
-
-    private double wCenter() {
-        return getSheet().getGrid().getSizeMin() * getGridWidth() / 2.0;
     }
 
     @Override
@@ -168,6 +154,6 @@ public class PushButton extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Momentové tlačidlo - v kľude výstup O a slabý pull-up na 1; stlačením pretiahne vstup (0/1) na výstup";
+        return "Tlačidlo - v kľude výstup O a slabý pull-up na 1; ľavým tlačidlom stlačíš (0/1), pravým trvalo prepneš stav";
     }
 }
