@@ -35,6 +35,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Ram256;
 import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
+import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
 import sk.uniza.fri.cp.SchematicSim.Gates.Switch;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
@@ -160,6 +161,7 @@ public class SchematicController {
         picker.registerItem(new Led());
         picker.registerItem(new SevenSegmentDisplay());
         picker.registerItem(new Switch());
+        picker.registerItem(new PushButton());
 
         //zbernice
         picker.registerItem(new AddressBus16());
