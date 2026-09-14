@@ -10,6 +10,7 @@ import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
+import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
@@ -96,6 +97,9 @@ public class SchemeLoader {
         for (Wire wire : sheet.getWires()) {
             Element wireElement = new Element("Wire");
             wireElement.setAttribute("color", colorToHex(wire.getColor()));
+            if (wire.getBranchExit() != null) {
+                wireElement.setAttribute("branchExit", wire.getBranchExit().name());
+            }
 
             WireEnd[] ends = wire.getEnds();
             appendWireEnd(wireElement, "start", ends[0]);
@@ -283,6 +287,17 @@ public class SchemeLoader {
         Wire wire = new Wire(sheet);
         sheet.addItem(wire);
         wire.changeColor(Color.valueOf(colorFromHex(wireElement.getAttributeValue("color"))));
+
+        // preferovaný smer prvej úsečky (ulovené pri ťahaní odbočky zo spájača) - vrátime ho,
+        // aby router po načítaní zachoval pôvodný tvar (L) a neprehupol ho do predvoleného Z
+        String branchExit = wireElement.getAttributeValue("branchExit");
+        if (branchExit != null && !branchExit.isEmpty()) {
+            try {
+                wire.setBranchExit(Side.valueOf(branchExit));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
         WireEnd[] ends = wire.getEnds();
 
         connectPinEnd(ends[0], startElement, gatesById);

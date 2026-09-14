@@ -344,8 +344,13 @@ public class Wire extends HighlightGroup {
     }
 
     /** Preferovaný smer prvej úsečky odbočky (pre OrthogonalRouter pri ťahaní zo spájača). */
-    Side getBranchExit() {
+    public Side getBranchExit() {
         return this.branchExit;
+    }
+
+    /** Nastavenie preferovaného smeru prvej úsečky (používa SchemeLoader pri načítavaní súboru). */
+    public void setBranchExit(Side side) {
+        this.branchExit = side;
     }
 
     /** Spájač, z ktorého sa tento vodič začal ťahať (null pre vodič začatý na pine). */
@@ -1244,6 +1249,9 @@ public class Wire extends HighlightGroup {
 
     private Joint splitSegment(WireSegment segment) {
         Joint newJoint = new Joint(getSheet(), this);
+        // zlom vzniknutý rozdelením segmentu (napr. pri načítaní súboru) sa vykresľuje
+        // bez sivého krúžku - rovnako ako zlomy vytvorené cez addSegmentWithPath
+        newJoint.setJointDotVisible(false);
 
         Joint firstJoint = segment.getStartJoint();
         Joint secondJoint = segment.getEndJoint();
