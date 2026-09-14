@@ -39,7 +39,7 @@ public class MatrixKeyboard extends GateSymbol {
     private Pin[] pinIn;
     private Pin[] pinOut;
     private Circle[][] keyPlungers;
-    private boolean[][] latched;
+    private boolean[][] keyOn;
 
     private volatile int pressedRow = -1;
     private volatile int pressedCol = -1;
@@ -59,7 +59,7 @@ public class MatrixKeyboard extends GateSymbol {
         // pole sa MUSIA vytvoriť tu, nie ako inštancové inicializátory - drawBody() sa volá
         // z konštruktora GateSymbol ešte PRED spustením inštancových inicializátorov
         keyPlungers = new Circle[ROWS][COLS];
-        latched = new boolean[ROWS][COLS];
+        keyOn = new boolean[ROWS][COLS];
 
         List<Pin> pins = new ArrayList<>(ROWS + COLS);
         pinIn = new Pin[ROWS];
@@ -104,11 +104,14 @@ public class MatrixKeyboard extends GateSymbol {
                     if (event.getButton() == MouseButton.PRIMARY) {
                         setPressed(r, c);
                     } else if (event.getButton() == MouseButton.SECONDARY) {
-                        setLatched(r, c, !latched[r][c]);
+                        // pravý klik trvalo prepne (toggle) - presne ako pri samostatnom tlačidle
+                        keyOn[r][c] = !keyOn[r][c];
+                        notifyStateChanged();
                     }
                 });
                 key.setOnMouseReleased(event -> {
                     if (event.getButton() == MouseButton.PRIMARY) {
+                        // pustením sa stav klávesy zruší - aj keď bola pravým klikom trvalo zapnutá
                         releasePressed(r, c);
                     }
                 });
@@ -121,7 +124,7 @@ public class MatrixKeyboard extends GateSymbol {
     }
 
     private boolean isActiveKey(int row, int col) {
-        return (pressedRow == row && pressedCol == col) || latched[row][col];
+        return (pressedRow == row && pressedCol == col) || keyOn[row][col];
     }
 
     @Override
@@ -147,7 +150,7 @@ public class MatrixKeyboard extends GateSymbol {
     public void reset() {
         pressedRow = -1;
         pressedCol = -1;
-        for (boolean[] row : latched) {
+        for (boolean[] row : keyOn) {
             Arrays.fill(row, false);
         }
         for (int row = 0; row < ROWS; row++) {
@@ -167,42 +170,36 @@ public class MatrixKeyboard extends GateSymbol {
         pressedCol = col;
         refreshVisual();
 
-        if (getSheet() != null && getSheet().isSimulationRunning()) {
-            simulate();
-        }
+        notifyStateChanged();
     }
 
     /**
-     * Uvoľnenie momentovo stlačenej klávesy.
+     * Uvoľnenie stlačenej klávesy - zruší aj jej prípadné trvalé (pravým klikom) zapnutie,
+     * presne ako pri samostatnom tlačidle.
      */
     public void releasePressed(int row, int col) {
         if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
         if (pressedRow != row || pressedCol != col) return;
         pressedRow = -1;
         pressedCol = -1;
+        keyOn[row][col] = false;
         refreshVisual();
 
-        if (getSheet() != null && getSheet().isSimulationRunning()) {
-            simulate();
-        }
+        notifyStateChanged();
     }
 
     /**
-     * Trvalé prepnutie (toggle) klávesy - ekvivalent pravého kliknutia.
+     * Ak beží simulácia, okamžite prepočítaj vývody, aby sa zmena rozšírila do vodičov a LED.
      */
-    public void setLatched(int row, int col, boolean value) {
-        if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
-        latched[row][col] = value;
-        refreshVisual();
-
+    private void notifyStateChanged() {
         if (getSheet() != null && getSheet().isSimulationRunning()) {
             simulate();
         }
     }
 
-    public boolean isKeyLatched(int row, int col) {
+    public boolean isKeyOn(int row, int col) {
         if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return false;
-        return latched[row][col];
+        return keyOn[row][col];
     }
 
     /**
