@@ -954,17 +954,32 @@ public class Wire extends HighlightGroup {
         }
 
         Joint prev = left;
+        int pieceStart = 0;
         for (int i = 1; i + 1 < path.size(); i++) {
             Point2D point = path.get(i);
+            // kolineárne vnútorné body (napr. miesto zaniknutého spájača po zlúčení vodičov)
+            // sa nestanú zlomom - zostanú len priebežnými bodmi trasy bez sivého krúžku
+            if (isCollinearWithNeighbours(path.get(i - 1), point, path.get(i + 1))) {
+                continue;
+            }
             Joint bend = new Joint(getSheet(), this);
             bend.moveTo(point.getX(), point.getY());
+            bend.setJointDotVisible(false);
             this.joints.add(bend);
             this.jointsGroup.getChildren().add(bend);
 
-            this.addSegmentWithPathOnly(prev, bend, path.subList(i - 1, i + 1));
+            this.addSegmentWithPathOnly(prev, bend, path.subList(pieceStart, i + 1));
             prev = bend;
+            pieceStart = i;
         }
-        this.addSegmentWithPathOnly(prev, right, path.subList(path.size() - 2, path.size()));
+        this.addSegmentWithPathOnly(prev, right, path.subList(pieceStart, path.size()));
+    }
+
+    /** Je bod {@code b} na priamke spájajúcej body {@code a} a {@code c}? */
+    private static boolean isCollinearWithNeighbours(Point2D a, Point2D b, Point2D c) {
+        double cross = (b.getX() - a.getX()) * (c.getY() - b.getY())
+                - (b.getY() - a.getY()) * (c.getX() - b.getX());
+        return Math.abs(cross) < 1e-6;
     }
 
     private void addSegmentWithPathOnly(Joint left, Joint right, List<Point2D> path) {
@@ -1003,12 +1018,17 @@ public class Wire extends HighlightGroup {
     private void resolveDeletedHub(WireJunction hub) {
         if (hub == null || hub.isRemoved()) return;
         List<Wire> wires = attachedWiresOf(hub);
-        Wire[] pair = straightPair(hub, wires);
-        if (pair != null) {
-            mergeWiresAtJunction(hub, pair[0], pair[1]);
-        } else {
+        if (wires.size() == 2) {
+            Wire[] pair = straightPair(hub, wires);
+            if (pair != null) {
+                mergeWiresAtJunction(hub, pair[0], pair[1]);
+            } else {
+                destroyJunction(hub);
+            }
+        } else if (wires.size() <= 1) {
             destroyJunction(hub);
         }
+        // 3+ vodičov: spájač zostáva (je stále potrebný ako odbočný bod)
     }
 
     /**
