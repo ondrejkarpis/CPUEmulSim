@@ -31,8 +31,10 @@ public class MatrixKeyboard extends GateSymbol {
 
     private static final int ROWS = 4;
     private static final int COLS = 4;
-    private static final int GRID_WIDTH = COLS + 1;
-    private static final int GRID_HEIGHT = ROWS + 1;
+    /** Veľkosť jednej klávesy v bunkách mriežky - ako samostatné tlačidlo (2x2). */
+    private static final int KEY_GRID = 2;
+    private static final int GRID_WIDTH = COLS * KEY_GRID + 1;
+    private static final int GRID_HEIGHT = ROWS * KEY_GRID + 1;
 
     private Pin[] pinIn;
     private Pin[] pinOut;
@@ -62,12 +64,12 @@ public class MatrixKeyboard extends GateSymbol {
         List<Pin> pins = new ArrayList<>(ROWS + COLS);
         pinIn = new Pin[ROWS];
         for (int row = 0; row < ROWS; row++) {
-            pinIn[row] = new InputPin(this, "R" + row, 0, row + 1, Side.LEFT);
+            pinIn[row] = new InputPin(this, "R" + row, 0, 1 + row * KEY_GRID + KEY_GRID / 2, Side.LEFT);
             pins.add(pinIn[row]);
         }
         pinOut = new Pin[COLS];
         for (int col = 0; col < COLS; col++) {
-            pinOut[col] = new OutputPin(this, "C" + col, col + 1, 0, Side.TOP);
+            pinOut[col] = new OutputPin(this, "C" + col, 1 + col * KEY_GRID + KEY_GRID / 2, 0, Side.TOP);
             // slabý výstup (pull-up): idle HIGH, silný vodič na sieti ho môže pretiahnuť
             pinOut[col].getOwnedPotential().setType(PinType.WEAK_OUT);
             pins.add(pinOut[col]);
@@ -78,23 +80,24 @@ public class MatrixKeyboard extends GateSymbol {
     @Override
     protected Pane drawBody() {
         int cell = getSheet().getGrid().getSizeMin();
-        double w = getGridWidth() * cell;
-        double h = getGridHeight() * cell;
 
-        Rectangle body = new Rectangle(w, h);
-        body.setFill(Color.WHITESMOKE);
-        body.setStroke(Color.GRAY);
-        body.setStrokeWidth(1.5);
+        Pane pane = new Pane();
 
-        Pane pane = new Pane(body);
-
-        // klávesy v matici 4x4 - ľavým tlačidlom stlač a drž, pustením sa vráti do kľudu;
-        // pravým tlačidlom sa stav klávesy trvalo prepne (toggle)
+        // klávesy v matici 4x4 - každá klávesa má veľkosť/štýl samostatného tlačidla (2x2 bunky);
+        // ľavým tlačidlom stlač a drž, pustením sa vráti do kľudu; pravým sa stav trvalo prepne
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
-                Circle key = new Circle((col + 1.5) * cell, (row + 1.5) * cell, cell * 0.3, Color.BLACK);
+                double bx = (1 + col * KEY_GRID) * cell;
+                double by = (1 + row * KEY_GRID) * cell;
+
+                Rectangle keyBody = new Rectangle(bx, by, KEY_GRID * cell, KEY_GRID * cell);
+                keyBody.setFill(Color.WHITESMOKE);
+                keyBody.setStroke(Color.GRAY);
+                keyBody.setStrokeWidth(1.5);
+
+                Circle key = new Circle(bx + cell, by + cell, cell * 0.6, Color.BLACK);
                 key.setStroke(Color.WHITE);
-                key.setStrokeWidth(1.0);
+                key.setStrokeWidth(1.5);
                 final int r = row;
                 final int c = col;
                 key.setOnMousePressed(event -> {
@@ -110,7 +113,7 @@ public class MatrixKeyboard extends GateSymbol {
                     }
                 });
                 keyPlungers[row][col] = key;
-                pane.getChildren().add(key);
+                pane.getChildren().addAll(keyBody, key);
             }
         }
 
