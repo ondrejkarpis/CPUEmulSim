@@ -84,6 +84,7 @@ public abstract class Pin extends Group implements Connectable {
 
     private final EventHandler<MouseEvent> onMouseDragDetected = event -> {
         if (!event.isPrimaryButtonDown()) return;
+        if (owner.getSheet() != null && !owner.getSheet().isEditingEnabled()) return;
         startFullDrag();
 
         beginWireCreation(this);

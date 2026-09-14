@@ -45,6 +45,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     private static final int SEGMENT_COUNT = 8;
 
     private static final Color SEGMENT_OFF = Color.rgb(64, 64, 64);
+    private static final Color SEGMENT_UNPOWERED = Color.rgb(10, 10, 10);
 
     private static final Map<String, Color> DISPLAY_COLORS = new LinkedHashMap<>();
     static {
@@ -68,6 +69,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     private volatile Color segmentColor = DISPLAY_COLORS.get("Červená");
 
     private boolean[] litSegments = new boolean[SEGMENT_COUNT];
+    private volatile boolean powered;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public SevenSegmentDisplay() {
@@ -101,6 +103,7 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     private void showContextMenu(MouseEvent event) {
         if (event.getButton() == MouseButton.SECONDARY) {
+            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
             // označiť aktuálne zvolenú farbu (alebo zrušiť označenie pri vlastnej farbe)
             boolean found = false;
             for (Toggle toggle : colorGroup.getToggles()) {
@@ -220,12 +223,14 @@ public class SevenSegmentDisplay extends GateSymbol {
         // všetky vstupy sú aktívne v 0: segment svieti, keď je jeho vstup logická 0
         // a súčasne je logická 0 aj na CA (spoločná anóda = master spínanie displeja)
         boolean enabled = isLow(caPin);
+        boolean powerChanged = enabled != powered;
+        powered = enabled;
         boolean[] newLit = new boolean[SEGMENT_COUNT];
         for (int i = 0; i < SEGMENT_COUNT; i++) {
             newLit[i] = enabled && isLow(segmentPins.get(i));
         }
 
-        boolean changed = false;
+        boolean changed = powerChanged;
         for (int i = 0; i < SEGMENT_COUNT; i++) {
             if (newLit[i] != litSegments[i]) {
                 changed = true;
@@ -243,6 +248,9 @@ public class SevenSegmentDisplay extends GateSymbol {
         for (Pin pin : getPins()) {
             setPinForce(pin, Pin.PinState.NOT_CONNECTED);
         }
+        litSegments = new boolean[SEGMENT_COUNT];
+        powered = false;
+        refreshVisual();
     }
 
     /**
@@ -257,7 +265,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         Platform.runLater(() -> {
             visualUpdateScheduled = false;
             for (int i = 0; i < SEGMENT_COUNT; i++) {
-                segmentShapes[i].setFill(litSegments[i] ? segmentColor : SEGMENT_OFF);
+                segmentShapes[i].setFill(litSegments[i] ? segmentColor : (powered ? SEGMENT_OFF : SEGMENT_UNPOWERED));
             }
         });
     }

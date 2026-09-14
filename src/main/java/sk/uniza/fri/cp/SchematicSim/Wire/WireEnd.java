@@ -65,11 +65,13 @@ public class WireEnd extends Joint {
         this.setJointDotVisible(false);
 
         this.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            if (!getSheet().isEditingEnabled()) return;
             getWire().setMouseTransparent(true);
             getWire().setOpacity(0.5);
         });
 
         this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
+            if (!getSheet().isEditingEnabled()) return;
             startFullDrag();
             this.moved = true;
             if (this.pin != null) {

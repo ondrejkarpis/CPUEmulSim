@@ -61,6 +61,9 @@ public class SchematicSheet extends ScrollPane {
 
     private boolean hasChanged = false;
 
+    /** Povolenie editácie schémy (pridávanie/mazanie/presun vodičov a súčiastok). */
+    private final SimpleBooleanProperty editingEnabled = new SimpleBooleanProperty(true);
+
     /** Debug-farbenie vodičov podľa logického stavu (Z sivá, 0 modrá, 1 červená). */
     private final SimpleBooleanProperty debugWires = new SimpleBooleanProperty(false);
 
@@ -68,6 +71,7 @@ public class SchematicSheet extends ScrollPane {
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
 
     private final EventHandler<MouseDragEvent> onMouseDragEnteredHandle = event -> {
+        if (!isEditingEnabled()) return;
         hasChanged = true;
         if (addingItem == null && event.getGestureSource() instanceof Item) {
             Item item = (Item) event.getGestureSource();
@@ -392,6 +396,7 @@ public class SchematicSheet extends ScrollPane {
     }
 
     public void deleteSelect() {
+        if (!isEditingEnabled()) return;
         new ArrayList<>(selected).forEach(Selectable::delete);
     }
 
@@ -430,6 +435,18 @@ public class SchematicSheet extends ScrollPane {
 
     public boolean isSimulationRunning() {
         return simRunningProperty().getValue();
+    }
+
+    public boolean isEditingEnabled() {
+        return editingEnabled.get();
+    }
+
+    public void setEditingEnabled(boolean enabled) {
+        editingEnabled.set(enabled);
+    }
+
+    public ReadOnlyBooleanProperty editingEnabledProperty() {
+        return editingEnabled;
     }
 
     public ReadOnlyBooleanProperty simRunningProperty() {

@@ -101,6 +101,7 @@ public class WireJunction extends Joint implements Connectable {
     private void registerWireStartHandlers() {
         this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
             if (!event.isPrimaryButtonDown()) return;
+            if (!getSheet().isEditingEnabled()) return;
             if (event.isShortcutDown()) {
                 // Ctrl+ťah = spustenie novej odbočky zo spájača
                 Pin.beginWireCreation(this);

@@ -26,6 +26,7 @@ public abstract class Movable extends HighlightGroup {
 
     private final EventHandler<MouseEvent> onMousePressedEventHandler = event -> {
         if (!event.isPrimaryButtonDown()) return;
+        if (sheet != null && !sheet.isEditingEnabled()) return;
         nodeOffsetX = event.getSceneX() - getLayoutX() * sheet.getAppliedScale();
         nodeOffsetY = event.getSceneY() - getLayoutY() * sheet.getAppliedScale();
         event.consume();
@@ -33,6 +34,7 @@ public abstract class Movable extends HighlightGroup {
 
     private final EventHandler<MouseEvent> onMouseDraggedEventHandler = event -> {
         if (!event.isPrimaryButtonDown()) return;
+        if (sheet != null && !sheet.isEditingEnabled()) return;
 
         setCursor(Cursor.DEFAULT);
 

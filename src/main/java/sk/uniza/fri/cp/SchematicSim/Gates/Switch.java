@@ -75,11 +75,12 @@ public class Switch extends GateSymbol {
         // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
         button.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.SECONDARY) {
-                showPlacementMenu(event.getScreenX(), event.getScreenY());
+                if (getSheet() != null && getSheet().isEditingEnabled()) showPlacementMenu(event.getScreenX(), event.getScreenY());
                 event.consume();
             }
         });
         button.setOnContextMenuRequested(event -> {
+            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
             if (contextMenu == null || !contextMenu.isShowing()) {
                 showPlacementMenu(event.getScreenX(), event.getScreenY());
             }

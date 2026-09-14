@@ -81,11 +81,12 @@ public class Led extends GateSymbol {
         // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
         light.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.SECONDARY) {
-                showMenu(event.getScreenX(), event.getScreenY());
+                if (getSheet() != null && getSheet().isEditingEnabled()) showMenu(event.getScreenX(), event.getScreenY());
                 event.consume();
             }
         });
         light.setOnContextMenuRequested(event -> {
+            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
             if (contextMenu == null || !contextMenu.isShowing()) {
                 showMenu(event.getScreenX(), event.getScreenY());
             }

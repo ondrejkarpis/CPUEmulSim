@@ -78,6 +78,7 @@ public class Wire extends HighlightGroup {
 
     private final EventHandler<MouseEvent> onMouseDragDetected = event -> {
         if (!event.isPrimaryButtonDown()) return;
+        if (!getSheet().isEditingEnabled()) return;
 
         WireSegment segmentToSplit = findSegmentTarget(event.getTarget());
         if (segmentToSplit == null) return;

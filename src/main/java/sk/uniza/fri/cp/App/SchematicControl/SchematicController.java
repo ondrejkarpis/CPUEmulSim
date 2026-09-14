@@ -129,6 +129,7 @@ public class SchematicController {
 
     private void updateSimulationControls(boolean running) {
         if (running != this.tsPower.isSelected()) this.tsPower.setSelected(running);
+        this.sheet.setEditingEnabled(!running); // editácia len pri vypnutej simulácii
         this.lbStatus.setText(running ? "Simulácia beží" : "Simulácia zastavená");
     }
 

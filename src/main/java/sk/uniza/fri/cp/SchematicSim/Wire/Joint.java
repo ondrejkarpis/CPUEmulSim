@@ -61,7 +61,7 @@ public class Joint extends Movable {
         });
 
         this.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) this.delete();
+            if (event.getClickCount() == 2 && getSheet().isEditingEnabled()) this.delete();
             else getSheet().addSelect(getWire());
         });
 
