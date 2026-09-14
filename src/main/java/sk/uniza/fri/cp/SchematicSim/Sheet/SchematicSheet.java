@@ -23,7 +23,6 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
-import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
@@ -316,14 +315,7 @@ public class SchematicSheet extends ScrollPane {
     }
 
     private WireJunction findJunctionNear(Wire wire, double x, double y) {
-        for (Joint joint : wire.getJoints()) {
-            if (joint instanceof WireJunction
-                    && Math.abs(joint.getLayoutX() - x) < 8
-                    && Math.abs(joint.getLayoutY() - y) < 8) {
-                return (WireJunction) joint;
-            }
-        }
-        return null;
+        return wire.findJunctionNear(x, y);
     }
 
     public double getAppliedScale() {

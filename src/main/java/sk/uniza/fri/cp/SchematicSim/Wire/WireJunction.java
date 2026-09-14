@@ -15,7 +15,9 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Bod pripojenia vodiča na iný vodič (spájač). Umožňuje začínať a ukončovať
@@ -29,6 +31,15 @@ public class WireJunction extends Joint implements Connectable {
     private final List<WireEnd> connectedEnds = new ArrayList<>();
     private final Circle junctionDot;
     private final Circle colorizerDot;
+
+    /**
+     * Vodič, ktorý spájač obýva (v novom modeli je spájač hraničným bodom dvoch vodičov -
+     * kmeň sa v ňom rozdeľuje na dva vodiče). Hostiteľ zodpovedá za vykreslenie node.
+     */
+    private Wire hostWire;
+
+    /** Príznak, že je spájač už zničený (zabezpečuje idempotentné mazanie). */
+    private boolean removed;
 
     public WireJunction(SchematicSheet sheet, Wire wire) {
         super(sheet, wire);
@@ -45,6 +56,27 @@ public class WireJunction extends Joint implements Connectable {
         this.getChildren().add(this.colorizerDot);
 
         registerWireStartHandlers();
+    }
+
+    public void setHostWire(Wire wire) {
+        this.hostWire = wire;
+    }
+
+    public Wire getHostWire() {
+        return this.hostWire;
+    }
+
+    @Override
+    public Wire getWire() {
+        return this.hostWire != null ? this.hostWire : super.getWire();
+    }
+
+    public boolean isRemoved() {
+        return this.removed;
+    }
+
+    void markRemoved() {
+        this.removed = true;
     }
 
     /**
@@ -109,44 +141,59 @@ public class WireJunction extends Joint implements Connectable {
 
     /**
      * Nájde pin, na ktorý je tento spájač elektricky napojený cez vodiče.
+     * V novom modeli sa spájačom vodiace vodiče navzájom dotýkajú cez napojené konce,
+     * preto sa prechádza graf napojených koncov (s ochranou proti cyklom). Ako poistka
+     * pre staré súbory ostáva prechod cez segmenty.
      */
     public Pin findConnectedPin() {
-        for (WireSegment segment : getConnectedSegments()) {
-            if (segment == null) continue;
-            Joint other = segment.getOtherJoint(this);
-            if (other instanceof WireEnd) {
-                Pin pin = ((WireEnd) other).getPin();
+        return findConnectedPin(new HashSet<>());
+    }
+
+    private Pin findConnectedPin(Set<WireJunction> visited) {
+        if (!visited.add(this)) return null;
+
+        for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
+            Pin direct = end.getPin();
+            if (direct != null) return direct;
+
+            Wire wire = end.getWire();
+            if (wire == null) continue;
+            for (WireEnd other : wire.getEnds()) {
+                if (other == end) continue;
+                Pin pin = other.getPin();
                 if (pin != null) return pin;
-            } else {
-                Pin pin = findPinThroughJoints(other, this);
-                if (pin != null) return pin;
+                WireJunction otherJunction = other.getJunction();
+                if (otherJunction != null && otherJunction != this) {
+                    Pin found = otherJunction.findConnectedPin(visited);
+                    if (found != null) return found;
+                }
             }
+        }
+
+        // legacy: prechod cez segmenty (starý model s vnútorným spájačom na kmeňovom vodiči)
+        if (!visited.isEmpty()) {
+            Pin legacy = findPinThroughSegments();
+            if (legacy != null) return legacy;
         }
         return null;
     }
 
-    private static Pin findPinThroughJoints(Joint current, Joint visited) {
-        for (int i = 0; i < 2; i++) {
-            WireSegment seg = i == 0 ? current.getPrimaryWireSegment() : current.getSecondaryWireSegment();
-            if (seg == null) continue;
-            Joint other = seg.getOtherJoint(current);
-            if (other == visited) continue;
-            if (other instanceof WireEnd) {
-                Pin pin = ((WireEnd) other).getPin();
-                if (pin != null) return pin;
-            } else if (other instanceof WireJunction) {
-                Pin pin = ((WireJunction) other).findConnectedPin();
-                if (pin != null) return pin;
-            }
-        }
-        return null;
+    private Pin findPinThroughSegments() {
+        Pin pin = findPinThroughSegments(wireSegments[0], this);
+        if (pin != null) return pin;
+        return findPinThroughSegments(wireSegments[1], this);
     }
 
-    private List<WireSegment> getConnectedSegments() {
-        List<WireSegment> result = new ArrayList<>();
-        if (wireSegments[0] != null) result.add(wireSegments[0]);
-        if (wireSegments[1] != null) result.add(wireSegments[1]);
-        return result;
+    private static Pin findPinThroughSegments(WireSegment seg, Joint visited) {
+        if (seg == null) return null;
+        Joint other = seg.getOtherJoint(visited);
+        if (other instanceof WireEnd) {
+            return ((WireEnd) other).getPin();
+        }
+        if (other instanceof WireJunction) {
+            return ((WireJunction) other).findPinThroughSegments(other.getPrimaryWireSegment(), other);
+        }
+        return null;
     }
 
     @Override
@@ -205,6 +252,7 @@ public class WireJunction extends Joint implements Connectable {
 
     @Override
     public void delete() {
+        if (this.removed) return;
         getWire().removeJunction(this);
     }
 

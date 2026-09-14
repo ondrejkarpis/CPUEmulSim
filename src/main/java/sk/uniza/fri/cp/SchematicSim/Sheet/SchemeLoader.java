@@ -213,8 +213,10 @@ public class SchemeLoader {
             if (wiresElement != null) {
                 List<Wire> loadedWires = new ArrayList<>();
                 List<WireEntry> pendingResolve = new ArrayList<>();
+                // zdieľané spájače: konce vodičov v jednom bode sa napoja na rovnaký hub
+                Map<Long, WireJunction> hubByKey = new HashMap<>();
                 for (Element wireElement : wiresElement.getChildren("Wire")) {
-                    WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires);
+                    WireEntry entry = loadWire(sheet, wireElement, gatesById, loadedWires, hubByKey);
                     if (entry == null) continue;
 
                     if (entry.wire.areBothEndsConnected()) {
@@ -228,8 +230,8 @@ public class SchemeLoader {
                 // vodičom (v praxi sa to nestáva, ale kvôli robustnosti to ošetrujeme)
                 List<WireEntry> stillPending = new ArrayList<>();
                 for (WireEntry entry : pendingResolve) {
-                    resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires);
-                    resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires);
+                    resolveJunctionEnd(entry.wire.getEnds()[0], entry.startElement, loadedWires, hubByKey);
+                    resolveJunctionEnd(entry.wire.getEnds()[1], entry.endElement, loadedWires, hubByKey);
 
                     if (entry.wire.areBothEndsConnected()) {
                         loadedWires.add(entry.wire);
@@ -273,7 +275,8 @@ public class SchemeLoader {
      * {@code null} ak sa vodič nepodarilo načítať.
      */
     private static WireEntry loadWire(SchematicSheet sheet, Element wireElement,
-                                      Map<String, GateSymbol> gatesById, List<Wire> loadedWires) {
+                                      Map<String, GateSymbol> gatesById, List<Wire> loadedWires,
+                                      Map<Long, WireJunction> hubByKey) {
         Element startElement = wireElement.getChild("start");
         Element endElement = wireElement.getChild("end");
 
@@ -294,8 +297,8 @@ public class SchemeLoader {
             }
         }
 
-        resolveJunctionEnd(ends[0], startElement, loadedWires);
-        resolveJunctionEnd(ends[1], endElement, loadedWires);
+        resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey);
+        resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey);
 
         return new WireEntry(wire, startElement, endElement);
     }
@@ -341,11 +344,19 @@ public class SchemeLoader {
 
     /**
      * Pripojenie konca vodiča, ktorý je v súbore uložený ako spájač (junction) na iný vodič.
-     * Spájač sa vytvorí na už načítanom (kmeňovom) vodiči prechádzajúcom daným bodom.
+     * <p>
+     * V novom modeli sa kmeňový vodič v mieste spájača rozdeľuje na DVA vodiče a všetky
+     * konce zdieľajúce rovnaký bod sa napájajú na jeden spoločný spájač (hub) - preto sa
+     * spájače najprv zdieľajú cez mapu {@code hubByKey} (všetci pripojení v danom bode
+     * dostanú ten istý objekt). Ak už v bode hub existuje, pripojí sa naň.
+     * <p>
+     * Pre staré súbory (kde kmeň cez bod len prechádza) sa ako poistka hľadá kmeňový vodič
+     * prechádzajúci bodom a na ňom sa spájač vytvorí rozdeľujúcim {@code createJunction}.
      *
      * @return true ak sa koniec podarilo pripojiť na spájač.
      */
-    private static boolean resolveJunctionEnd(WireEnd end, Element endElement, List<Wire> loadedWires) {
+    private static boolean resolveJunctionEnd(WireEnd end, Element endElement, List<Wire> loadedWires,
+                                              Map<Long, WireJunction> hubByKey) {
         if (endElement == null || end.isConnected()) return true;
 
         Element junctionElement = endElement.getChild("junction");
@@ -361,30 +372,56 @@ public class SchemeLoader {
         }
 
         Point2D pos = new Point2D(x, y);
+        long key = keyOf(x, y);
 
-        // najprv hľadáme existujúci spájač v danom bode
+        // nový model: spájač už môže byť vytvorený iným koncom v rovnakom bode
+        WireJunction shared = hubByKey.get(key);
+        if (shared != null && !shared.isRemoved()) {
+            end.connect(shared);
+            return true;
+        }
+
+        // existujúci hub presne v bode (najmä starý formát, kde hub zapísal prvý z koncov)
         for (Wire loadedWire : loadedWires) {
             if (loadedWire == end.getWire()) continue;
             WireJunction existing = loadedWire.findJunctionAt(pos);
             if (existing != null) {
+                hubByKey.put(key, existing);
                 end.connect(existing);
                 return true;
             }
         }
 
-        // ak neexistuje, nájdeme kmeňový vodič prechádzajúci bodom a vytvoríme na ňom spájač
+        // starý formát: kmeňový vodič len prechádza bodom - rozdelí sa na dva vodiče
         for (Wire loadedWire : loadedWires) {
             if (loadedWire == end.getWire()) continue;
             if (loadedWire.findSegmentNear(pos) != null) {
                 WireJunction junction = loadedWire.createJunction(pos);
                 if (junction != null) {
+                    hubByKey.put(key, junction);
                     end.connect(junction);
                     return true;
                 }
             }
         }
 
+        // nový model (koniec je na mieste, kde vodič končí): vytvoríme samostatný hub
+        WireJunction standalone = end.getWire().createStandaloneHub(pos);
+        if (standalone != null && !standalone.isRemoved()) {
+            hubByKey.put(key, standalone);
+            end.connect(standalone);
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * Kľúč bodu pre zdieľanie spájačov pri načítaní. Body sú zarovnané na mriežku,
+     * preto stačí celočíselné zaokrúhlenie.
+     */
+    private static long keyOf(double x, double y) {
+        return Math.round(x) * 1000003L + Math.round(y);
     }
 
     private static String colorToHex(Color color) {

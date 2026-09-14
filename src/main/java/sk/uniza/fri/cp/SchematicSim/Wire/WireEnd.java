@@ -281,4 +281,19 @@ public class WireEnd extends Joint {
         }
     }
 
+    /**
+     * Odpojenie konca od spájača BEZ kaskádovej rekurzie - používa sa pri hromadných
+     * operáciách (merge/zničenie hubu), kde nechceme, aby posledné odpojenie spúšťalo
+     * automatické zmazanie spájača (o to sa postará volajúci).
+     */
+    void detachFromJunction() {
+        if (this.junction == null) return;
+        this.junction.layoutXProperty().removeListener(junctionPositionChangeListener);
+        this.junction.layoutYProperty().removeListener(junctionPositionChangeListener);
+        this.junction.removeWireEnd(this);
+        this.junction = null;
+        this.getWire().updatePotential();
+        this.setDefaultColor();
+    }
+
 }
