@@ -36,8 +36,8 @@ public class MatrixKeyboard extends GateSymbol {
 
     private Pin[] pinIn;
     private Pin[] pinOut;
-    private final Circle[][] keyPlungers;
-    private final boolean[][] latched;
+    private Circle[][] keyPlungers;
+    private boolean[][] latched;
 
     private volatile int pressedRow = -1;
     private volatile int pressedCol = -1;
