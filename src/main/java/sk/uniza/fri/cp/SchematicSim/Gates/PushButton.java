@@ -36,6 +36,7 @@ public class PushButton extends GateSymbol {
     private Circle plunger;
 
     private volatile boolean pressed = false;
+    private volatile boolean latched = false;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public PushButton() {
@@ -76,7 +77,7 @@ public class PushButton extends GateSymbol {
             if (event.getButton() == MouseButton.PRIMARY) {
                 setPressedState(true);
             } else if (event.getButton() == MouseButton.SECONDARY) {
-                setPressedState(!pressed);
+                setLatched(!latched);
             }
         });
         plunger.setOnMouseReleased(event -> {
@@ -90,8 +91,8 @@ public class PushButton extends GateSymbol {
 
     @Override
     public void simulate() {
-        // kľud: slabý pull-up drží výstup na 1; stlačenie prenáša vstup na výstup
-        if (pressed && isLow(pinIn)) {
+        // kľud: slabý pull-up drží výstup na 1; stlačenie (momentové alebo trvalé) prenáša vstup na výstup
+        if ((pressed || latched) && isLow(pinIn)) {
             setPin(pinOut, Pin.PinState.LOW);
         } else {
             setPin(pinOut, Pin.PinState.HIGH);
@@ -101,12 +102,14 @@ public class PushButton extends GateSymbol {
     @Override
     public void reset() {
         pressed = false;
+        latched = false;
         if (pinIn != null) setPinForce(pinIn, Pin.PinState.NOT_CONNECTED);
         if (pinOut != null) setPinForce(pinOut, Pin.PinState.NOT_CONNECTED);
     }
 
     /**
-     * Priame nastavenie stavu stlačenia (ekvivalent kliknutia tlačidla).
+     * Priame nastavenie momentového stlačenia (ekvivalent podržania ľavým tlačidlom myši).
+     * Nemenie trvalý (pravým tlačidlom prepnutý) stav.
      */
     public void setPressedState(boolean value) {
         pressed = value;
@@ -118,8 +121,24 @@ public class PushButton extends GateSymbol {
         }
     }
 
+    /**
+     * Trvalé prepnutie (toggle) tlačidla - ekvivalent pravého kliknutia.
+     */
+    public void setLatched(boolean value) {
+        latched = value;
+        refreshVisual();
+
+        if (getSheet() != null && getSheet().isSimulationRunning()) {
+            simulate();
+        }
+    }
+
     public boolean isPressedState() {
         return pressed;
+    }
+
+    public boolean isLatched() {
+        return latched;
     }
 
     /**
@@ -133,7 +152,7 @@ public class PushButton extends GateSymbol {
         visualUpdateScheduled = true;
         Platform.runLater(() -> {
             visualUpdateScheduled = false;
-            plunger.setFill(pressed ? Color.DARKGRAY : Color.BLACK);
+            plunger.setFill((pressed || latched) ? Color.DARKGRAY : Color.BLACK);
         });
     }
 
