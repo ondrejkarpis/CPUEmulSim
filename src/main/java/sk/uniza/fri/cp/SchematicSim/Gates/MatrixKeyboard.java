@@ -64,12 +64,12 @@ public class MatrixKeyboard extends GateSymbol {
         List<Pin> pins = new ArrayList<>(ROWS + COLS);
         pinIn = new Pin[ROWS];
         for (int row = 0; row < ROWS; row++) {
-            pinIn[row] = new InputPin(this, "R" + row, 0, 1 + row * KEY_GRID + KEY_GRID / 2, Side.LEFT);
+            pinIn[row] = new InputPin(this, "R" + row, 1, 1 + row * KEY_GRID + KEY_GRID / 2, Side.LEFT);
             pins.add(pinIn[row]);
         }
         pinOut = new Pin[COLS];
         for (int col = 0; col < COLS; col++) {
-            pinOut[col] = new OutputPin(this, "C" + col, 1 + col * KEY_GRID + KEY_GRID / 2, 0, Side.TOP);
+            pinOut[col] = new OutputPin(this, "C" + col, 1 + col * KEY_GRID + KEY_GRID / 2, 1, Side.TOP);
             // slabý výstup (pull-up): idle HIGH, silný vodič na sieti ho môže pretiahnuť
             pinOut[col].getOwnedPotential().setType(PinType.WEAK_OUT);
             pins.add(pinOut[col]);
@@ -106,6 +106,7 @@ public class MatrixKeyboard extends GateSymbol {
                     } else if (event.getButton() == MouseButton.SECONDARY) {
                         // pravý klik trvalo prepne (toggle) - presne ako pri samostatnom tlačidle
                         keyOn[r][c] = !keyOn[r][c];
+                        refreshVisual();
                         notifyStateChanged();
                     }
                 });
