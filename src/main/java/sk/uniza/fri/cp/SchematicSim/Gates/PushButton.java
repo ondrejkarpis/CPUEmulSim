@@ -3,11 +3,18 @@ package sk.uniza.fri.cp.SchematicSim.Gates;
 import javafx.application.Platform;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextFormatter;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
+import javafx.scene.text.VPos;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
@@ -16,7 +23,9 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tlačidlo - v kľude je výstup {@code O} (slabý push/pull so slabým pull-upom)
@@ -24,7 +33,8 @@ import java.util.List;
  * v logickej 0, výstup sa pretiahne na 0, inak zostane 1. Ľavým tlačidlom myši sa tlačidlo
  * stláča momentovo (stlač a drž). Pravým tlačidlom sa otvorí kontextové menu s položkou
  * {@code Toggle}: ak je zapnutá, každé ľavé stlačenie opakovane prepína stav (sticky/trvalo),
- * ak je vypnutá, tlačidlo je stlačené len počas držania myši.
+ * ak je vypnutá, tlačidlo je stlačené len počas držania myši. Položka {@code Label} otvorí
+ * okno, v ktorom je možné na tlačidlo vpísať jedno písmeno (bielou farbou).
  * Vývod {@code O} je typu {@link PinType#WEAK_OUT} - na spoločnej sieti ho vždy pretiahne
  * silný (push-pull) výstup, takže tlačidlo nemôže spôsobiť skrat.
  *
@@ -40,9 +50,11 @@ public class PushButton extends GateSymbol {
     private Circle plunger;
     private ContextMenu contextMenu;
     private CheckMenuItem toggleItem;
+    private Text labelText;
 
     private volatile boolean pressed = false;
     private volatile boolean toggle = false;
+    private volatile String label = "";
 
     /** Konštruktor pre paletku (ItemPicker). */
     public PushButton() {
@@ -105,7 +117,15 @@ public class PushButton extends GateSymbol {
             event.consume();
         });
 
-        return new Pane(body, plunger);
+        // label písmeno na tlačidle - biela farba, vystredené cez plunžer
+        labelText = new Text(label);
+        labelText.setFill(Color.WHITE);
+        labelText.setFont(Font.font(cell * 0.7));
+        labelText.setTextOrigin(VPos.CENTER);
+        labelText.setMouseTransparent(true);
+        centerLabel();
+
+        return new Pane(body, plunger, labelText);
     }
 
     private void showMenu(double screenX, double screenY) {
@@ -113,11 +133,33 @@ public class PushButton extends GateSymbol {
             toggleItem = new CheckMenuItem("Toggle");
             toggleItem.setSelected(toggle);
             toggleItem.setOnAction(e -> setToggle(toggleItem.isSelected()));
-            contextMenu = new ContextMenu(toggleItem);
+
+            MenuItem labelItem = new MenuItem("Label…");
+            labelItem.setOnAction(e -> showLabelDialog());
+
+            contextMenu = new ContextMenu(toggleItem, new SeparatorMenuItem(), labelItem);
         } else {
             toggleItem.setSelected(toggle);
         }
         contextMenu.show(plunger, screenX, screenY);
+    }
+
+    private void showLabelDialog() {
+        TextInputDialog dialog = new TextInputDialog(label);
+        dialog.setTitle("Label tlačidla");
+        dialog.setHeaderText(null);
+        dialog.setContentText("Zadaj jedno písmeno:");
+        dialog.getEditor().setTextFormatter(new TextFormatter<String>(change ->
+                change.getControlNewText().length() <= 1 ? change : null));
+        dialog.showAndWait().ifPresent(this::setLabel);
+    }
+
+    private void centerLabel() {
+        if (labelText == null) return;
+        double w = getGridWidth() * getSheet().getGrid().getSizeMin();
+        double h = getGridHeight() * getSheet().getGrid().getSizeMin();
+        labelText.setLayoutY(h / 2.0);
+        labelText.setLayoutX(w / 2.0 - labelText.getBoundsInLocal().getWidth() / 2.0);
     }
 
     @Override
@@ -172,6 +214,43 @@ public class PushButton extends GateSymbol {
     }
 
     /**
+     * Nastavenie popisu tlačidla - jedno písmeno zobrazené bielou farbou na plunžeri.
+     * Prázdny reťazec label odstráni.
+     */
+    public void setLabel(String value) {
+        this.label = value == null ? "" : value;
+        if (labelText != null) {
+            labelText.setText(label);
+            centerLabel();
+        }
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public boolean isContextMenuShowing() {
+        return contextMenu != null && contextMenu.isShowing();
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        if (!label.isEmpty()) {
+            properties.put("label", label);
+        }
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String label = properties.get("label");
+        if (label != null) {
+            setLabel(label);
+        }
+    }
+
+    /**
      * Aktualizácia vizuálu vždy na FX vlákne (simulácia beží na separátnom vlákne).
      * Zmeny sú skoalescované do jednej čakajúcej úlohy.
      */
@@ -184,10 +263,6 @@ public class PushButton extends GateSymbol {
             visualUpdateScheduled = false;
             plunger.setFill(pressed ? Color.DARKGRAY : Color.BLACK);
         });
-    }
-
-    public boolean isContextMenuShowing() {
-        return contextMenu != null && contextMenu.isShowing();
     }
 
     @Override
@@ -207,6 +282,6 @@ public class PushButton extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Tlačidlo - ľavým tlačidlom stlačíš (0/1), pravým tlačidlom Toggle (trvalé prepínanie)";
+        return "Tlačidlo - ľavým tlačidlom stlačíš (0/1), pravým tlačidlom Toggle a Label";
     }
 }
