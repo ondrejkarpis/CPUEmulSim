@@ -14,7 +14,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
-import javafx.scene.text.VPos;
+import javafx.geometry.VPos;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
