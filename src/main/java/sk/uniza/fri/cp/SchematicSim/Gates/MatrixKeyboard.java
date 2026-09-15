@@ -1,6 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
@@ -15,12 +17,16 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Matricová klávesnica 4x4 - štyri vstupné riadky ({@code R0}..{@code R3}, vľavo) a štyri
  * výstupné stĺpce ({@code C0}..{@code C3}, hore). Každá z šestnástich kláves sa správa rovnako
- * ako samotné tlačidlo - ľavým tlačidlom myši sa stláča momentovo, pravým sa stav trvalo prepne.
+ * ako samotné tlačidlo. Pravým tlačidlom myši sa otvorí kontextové menu s položkou
+ * {@code Toggle}: ak je zapnutá, každé ľavé stlačenie klávesu trvalo prepne (latch),
+ * ak je vypnutá, klávesa je stlačená len počas držania myši.
  * Ak je stlačená niektorá klávesa v stĺpci a jej riadok je v logickej 0, výstup stĺpca sa
  * pretiahne na 0, inak je na 1 (slabý pull-up). Výstupy sú typu {@link PinType#WEAK_OUT} -
  * silný push-pull vodič na sieti ich vždy pretiahne, klávesnica nemôže spôsobiť skrat.
@@ -40,9 +46,12 @@ public class MatrixKeyboard extends GateSymbol {
     private Pin[] pinOut;
     private Circle[][] keyPlungers;
     private boolean[][] keyOn;
+    private ContextMenu contextMenu;
+    private CheckMenuItem toggleItem;
 
     private volatile int pressedRow = -1;
     private volatile int pressedCol = -1;
+    private volatile boolean toggle = false;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public MatrixKeyboard() {
@@ -84,7 +93,9 @@ public class MatrixKeyboard extends GateSymbol {
         Pane pane = new Pane();
 
         // klávesy v matici 4x4 - každá klávesa má veľkosť/štýl samostatného tlačidla (2x2 bunky);
-        // ľavým tlačidlom stlač a drž, pustením sa vráti do kľudu; pravým sa stav trvalo prepne
+        // ľavým tlačidlom sa stláča - pri zapnutom Toggle sa každé stlačenie prepne (trvalo),
+        // pri vypnutom je stlačená len počas držania myši. Pravým tlačidlom sa otvorí
+        // kontextové menu s položkou Toggle.
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
                 double bx = (1 + col * KEY_GRID) * cell;
@@ -102,19 +113,29 @@ public class MatrixKeyboard extends GateSymbol {
                 final int c = col;
                 key.setOnMousePressed(event -> {
                     if (event.getButton() == MouseButton.PRIMARY) {
-                        setPressed(r, c);
+                        if (toggle) {
+                            keyOn[r][c] = !keyOn[r][c];
+                            refreshVisual();
+                            notifyStateChanged();
+                        } else {
+                            setPressed(r, c);
+                        }
                     } else if (event.getButton() == MouseButton.SECONDARY) {
-                        // pravý klik trvalo prepne (toggle) - presne ako pri samostatnom tlačidle
-                        keyOn[r][c] = !keyOn[r][c];
-                        refreshVisual();
-                        notifyStateChanged();
+                        if (getSheet() != null && getSheet().isEditingEnabled()) showMenu(event.getScreenX(), event.getScreenY());
+                        event.consume();
                     }
                 });
                 key.setOnMouseReleased(event -> {
-                    if (event.getButton() == MouseButton.PRIMARY) {
-                        // pustením sa stav klávesy zruší - aj keď bola pravým klikom trvalo zapnutá
+                    if (event.getButton() == MouseButton.PRIMARY && !toggle) {
                         releasePressed(r, c);
                     }
+                });
+                key.setOnContextMenuRequested(event -> {
+                    if (getSheet() == null || !getSheet().isEditingEnabled()) return;
+                    if (contextMenu == null || !contextMenu.isShowing()) {
+                        showMenu(event.getScreenX(), event.getScreenY());
+                    }
+                    event.consume();
                 });
                 keyPlungers[row][col] = key;
                 pane.getChildren().addAll(keyBody, key);
@@ -122,6 +143,18 @@ public class MatrixKeyboard extends GateSymbol {
         }
 
         return pane;
+    }
+
+    private void showMenu(double screenX, double screenY) {
+        if (contextMenu == null) {
+            toggleItem = new CheckMenuItem("Toggle");
+            toggleItem.setSelected(toggle);
+            toggleItem.setOnAction(e -> setToggle(toggleItem.isSelected()));
+            contextMenu = new ContextMenu(toggleItem);
+        } else {
+            toggleItem.setSelected(toggle);
+        }
+        contextMenu.show(keyPlungers[0][0], screenX, screenY);
     }
 
     private boolean isActiveKey(int row, int col) {
@@ -175,8 +208,8 @@ public class MatrixKeyboard extends GateSymbol {
     }
 
     /**
-     * Uvoľnenie stlačenej klávesy - zruší aj jej prípadné trvalé (pravým klikom) zapnutie,
-     * presne ako pri samostatnom tlačidle.
+     * Uvoľnenie stlačenej klávesy - v momentovom režime (vypnutý Toggle) zruší aj jej
+     * prípadné trvalé zapnutie, presne ako pri samostatnom tlačidle.
      */
     public void releasePressed(int row, int col) {
         if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
@@ -187,6 +220,29 @@ public class MatrixKeyboard extends GateSymbol {
         refreshVisual();
 
         notifyStateChanged();
+    }
+
+    /**
+     * Prepnutie režimu Toggle: pri {@code true} každé ľavé stlačenie klávesu trvalo prepne,
+     * pri {@code false} je klávesa stlačená len počas držania myši.
+     */
+    public void setToggle(boolean value) {
+        if (toggle == value) return;
+        toggle = value;
+        // pri vypnutí Toggle sa všetky trvalo prepnuté klávesy vrátia do kľudu
+        if (!toggle) {
+            pressedRow = -1;
+            pressedCol = -1;
+            for (boolean[] row : keyOn) {
+                Arrays.fill(row, false);
+            }
+            refreshVisual();
+            notifyStateChanged();
+        }
+    }
+
+    public boolean isToggle() {
+        return toggle;
     }
 
     /**
@@ -225,6 +281,25 @@ public class MatrixKeyboard extends GateSymbol {
         });
     }
 
+    public boolean isContextMenuShowing() {
+        return contextMenu != null && contextMenu.isShowing();
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("toggle", String.valueOf(toggle));
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String toggle = properties.get("toggle");
+        if (toggle != null) {
+            setToggle(Boolean.parseBoolean(toggle));
+        }
+    }
+
     @Override
     public int getGridWidth() {
         return GRID_WIDTH;
@@ -242,6 +317,6 @@ public class MatrixKeyboard extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Klávesnica 4x4 - riadky R0-R3 (vľavo), stĺpce C0-C3 (hore); ľavým tlačidlom stlač, pravým trvalo prepneš";
+        return "Klávesnica 4x4 - riadky R0-R3 (vľavo), stĺpce C0-C3 (hore); ľavým tlačidlom stlač, pravým tlačidlom Toggle (trvalé prepínanie)";
     }
 }
