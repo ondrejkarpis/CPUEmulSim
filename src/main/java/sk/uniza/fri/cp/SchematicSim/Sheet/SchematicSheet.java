@@ -1,5 +1,6 @@
 package sk.uniza.fri.cp.SchematicSim.Sheet;
 
+import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -41,7 +42,8 @@ import java.util.List;
  *     <li>Na začiatku je plocha PRÁZDNA - žiadna počiatočná vývojová doska.</li>
  *     <li>Umiestňovanie súčiastok kontroluje voľnosť buniek mriežky cez {@link GridOccupancy}
  *     namiesto kolíznej detekcie pin↔soket.</li>
- *     <li>Zoom/pan mechanizmus je prevzatý bezo zmeny - je nezávislý od breadboardu.</li>
+ *     <li>Zoom/pan mechanizmus je prispôsobený: pri zome zostáva bod plochy pod kurzorom
+ *     na mieste (pôvodné riešenie z Board nastavovalo posun skôr, než sa prepočítal rozsah scrollbaru).</li>
  * </ul>
  *
  * @author Tomáš Hianik (pôvodný autor Board), adaptácia pre SchematicSim
@@ -146,7 +148,7 @@ public class SchematicSheet extends ScrollPane {
         this.addEventFilter(MouseDragEvent.MOUSE_DRAG_RELEASED, onMouseDragReleasedHandle);
         this.addEventHandler(MouseDragEvent.MOUSE_DRAG_EXITED, onMouseDragExitedHandle);
 
-        // ZOOM/PAN - prevzaté bezo zmeny z Board, nezávislé od breadboardu
+        // ZOOM/PAN
         this.setPannable(false);
 
         final Group contentGroup = this.layersManager.getLayers();
@@ -162,29 +164,49 @@ public class SchematicSheet extends ScrollPane {
             if (event.getDeltaY() == 0) return;
 
             double scaleFactor = (event.getDeltaY() > 0) ? SCALE_DELTA : 1 / SCALE_DELTA;
+            double newScale = scaleTotal.doubleValue() * scaleFactor;
+            if (newScale < 0.3 || newScale > 3) return;
 
-            if (scaleFactor * scaleTotal.get() >= 0.3 && scaleFactor * scaleTotal.get() <= 3) {
-                Point2D scrollOffset = figureScrollOffset(scrollContent, this);
+            //kotva zoomu = bod plochy pod kurzorom (v súradniciach mriežky)
+            Point2D anchor = contentGroup.sceneToLocal(event.getSceneX(), event.getSceneY());
 
-                //kotva zoomu = poloha kurzora vo viewporte, počítaná v scénovom priestore
-                //(odolná voči rozdielnym súradnicovým systémom obsahu a ScrollPane)
-                Bounds viewport = this.getViewportBounds();
-                Point2D viewportOrigin = this.localToScene(viewport.getMinX(), viewport.getMinY());
-                double anchorX = event.getSceneX() - viewportOrigin.getX();
-                double anchorY = event.getSceneY() - viewportOrigin.getY();
+            //kotva v px viewportu (scénové súradnice, nezávislé od obsahu);
+            //horší ľavý roh ScrollPane (0,0) je statický - na rozdiel od viewportBounds,
+            //ktoré sa posúvajú so scrollom
+            Point2D controlOrigin = this.localToScene(0, 0);
+            double anchorX = event.getSceneX() - controlOrigin.getX();
+            double anchorY = event.getSceneY() - controlOrigin.getY();
 
-                double oldContentWidth = scrollContent.getLayoutBounds().getWidth();
-                double oldContentHeight = scrollContent.getLayoutBounds().getHeight();
+            contentGroup.setScaleX(newScale);
+            contentGroup.setScaleY(newScale);
+            scaleTotal.setValue(newScale);
 
-                contentGroup.setScaleX(contentGroup.getScaleX() * scaleFactor);
-                contentGroup.setScaleY(contentGroup.getScaleY() * scaleFactor);
-                scaleTotal.setValue(scaleTotal.doubleValue() * scaleFactor);
+            //scroll upravíme oneskorene (až po najbližšom layout cykle) - skin ScrollPane si
+            //nový rozsah scrollbaru prepočíta až vtedy; zapísaný skôr by bol oklieštený
+            //na starý rozsah a bod plochy pod kurzorom by sa posunul
+            Platform.runLater(() -> Platform.runLater(() -> {
+                scrollContent.applyCss();
+                scrollContent.layout();
 
-                //novú veľkosť obsahu dopočítame explicitne - layoutBounds ešte nie je prepočítaný
-                double extraWidth = oldContentWidth * scaleFactor - viewport.getWidth();
-                double extraHeight = oldContentHeight * scaleFactor - viewport.getHeight();
-                repositionScroller(scrollContent, this, scaleFactor, scrollOffset, anchorX, anchorY, extraWidth, extraHeight);
-            }
+                double extraW = scrollContent.getLayoutBounds().getWidth() - this.getViewportBounds().getWidth();
+                double extraH = scrollContent.getLayoutBounds().getHeight() - this.getViewportBounds().getHeight();
+
+                //požadovaný posun: bod plochy pod kurzorom po priblížení musí zostať na anchorX;
+                //anchor je v (neskalovaných) súradniciach mriežky, preto ho násobíme NOVOU
+                //stupnicou newScale (nie koeficientom scaleFactor - ten platí len od stupnice 1)
+                if (extraW > 0) {
+                    double rangeW = this.getHmax() - this.getHmin();
+                    double targetW = anchor.getX() * newScale - anchorX;
+                    double ratioW = Math.max(0, Math.min(targetW / extraW, 1));
+                    this.setHvalue(this.getHmin() + ratioW * rangeW);
+                }
+                if (extraH > 0) {
+                    double rangeH = this.getVmax() - this.getVmin();
+                    double targetH = anchor.getY() * newScale - anchorY;
+                    double ratioH = Math.max(0, Math.min(targetH / extraH, 1));
+                    this.setVvalue(this.getVmin() + ratioH * rangeH);
+                }
+            }));
         });
 
         final javafx.beans.property.ObjectProperty<Point2D> lastMouseCoordinates = new javafx.beans.property.SimpleObjectProperty<>();
@@ -490,33 +512,5 @@ public class SchematicSheet extends ScrollPane {
     public Point2D getMousePositionOnGrid(MouseEvent event) {
         Point2D local = layersManager.getLayer("background").sceneToLocal(event.getSceneX(), event.getSceneY());
         return gridSystem.pixelToGrid(local.getX(), local.getY());
-    }
-
-    // ZOOM - prevzaté bezo zmeny z Board
-    private Point2D figureScrollOffset(Node scrollContent, ScrollPane scroller) {
-        double extraWidth = scrollContent.getLayoutBounds().getWidth() - scroller.getViewportBounds().getWidth();
-        double hScrollProportion = (scroller.getHvalue() - scroller.getHmin()) / (scroller.getHmax() - scroller.getHmin());
-        double scrollXOffset = hScrollProportion * Math.max(0, extraWidth);
-        double extraHeight = scrollContent.getLayoutBounds().getHeight() - scroller.getViewportBounds().getHeight();
-        double vScrollProportion = (scroller.getVvalue() - scroller.getVmin()) / (scroller.getVmax() - scroller.getVmin());
-        double scrollYOffset = vScrollProportion * Math.max(0, extraHeight);
-        return new Point2D(scrollXOffset, scrollYOffset);
-    }
-
-    private void repositionScroller(Node scrollContent, ScrollPane scroller, double scaleFactor, Point2D scrollOffset, double anchorX, double anchorY, double extraWidth, double extraHeight) {
-        double scrollXOffset = scrollOffset.getX();
-        double scrollYOffset = scrollOffset.getY();
-        if (extraWidth > 0) {
-            double newScrollXOffset = (scaleFactor - 1) * anchorX + scaleFactor * scrollXOffset;
-            scroller.setHvalue(scroller.getHmin() + newScrollXOffset * (scroller.getHmax() - scroller.getHmin()) / extraWidth);
-        } else {
-            scroller.setHvalue(scroller.getHmin());
-        }
-        if (extraHeight > 0) {
-            double newScrollYOffset = (scaleFactor - 1) * anchorY + scaleFactor * scrollYOffset;
-            scroller.setVvalue(scroller.getVmin() + newScrollYOffset * (scroller.getVmax() - scroller.getVmin()) / extraHeight);
-        } else {
-            scroller.setVvalue(scroller.getVmin());
-        }
     }
 }
