@@ -88,7 +88,7 @@ public class PushButton extends GateSymbol {
                     setPressedState(true);
                 }
             } else if (event.getButton() == MouseButton.SECONDARY) {
-                if (getSheet() != null && getSheet().isEditingEnabled()) showMenu(event.getScreenX(), event.getScreenY());
+                if (getSheet() != null) showMenu(event.getScreenX(), event.getScreenY());
                 event.consume();
             }
         });
@@ -98,7 +98,7 @@ public class PushButton extends GateSymbol {
             }
         });
         plunger.setOnContextMenuRequested(event -> {
-            if (getSheet() == null || !getSheet().isEditingEnabled()) return;
+            if (getSheet() == null) return;
             if (contextMenu == null || !contextMenu.isShowing()) {
                 showMenu(event.getScreenX(), event.getScreenY());
             }
