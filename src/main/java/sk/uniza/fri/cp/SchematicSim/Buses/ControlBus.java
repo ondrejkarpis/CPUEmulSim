@@ -1,28 +1,83 @@
 package sk.uniza.fri.cp.SchematicSim.Buses;
 
+import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
+import javafx.scene.Cursor;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.Pane;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+import sk.uniza.fri.cp.SchematicSim.Side;
+import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
- * Riadiaca zbernica. Výstupné signály (MW_, MR_, IW_, IR_, IA_) sú riadené CPU
- * a premietajú sa na vývody, ktoré ovládajú logiku obvodu. Vstupné signály
- * (IT, RY) sú riadené obvodom a CPU ich číta zo zbernice.
+ * Riadiaca zbernica zobrazená ako hrubá zvislá čiara ("lištová zbernica").
+ * <p>
+ * Chovanie (rovnako ako {@link AddressBus16}):
+ * <ul>
+ *     <li>dĺžku čiary možno meniť potiahnutím koncového rukoväťa (spodný koniec myšou);</li>
+ *     <li>ľavé kliknutie na čiaru otvorí menu výberu signálu MW_, MR_, IW_, IR_, IA_, RY, IT
+ *         a vybraný signál sa pridá na zbernicu ako kruzok (vývod);</li>
+ *     <li>natiahnutie spojenia (vodiča) na čiaru a pustenie myši tiež otvorí menu a pripojí vodič;</li>
+ *     <li>každý vývod má názov signálu zobrazený nad spojením vedľa zbernice;</li>
+ *     <li>z jednej zbernice možno ťahať viac rovnakých signálov - každé odbočenie tvorí
+ *         vlastný samostatný vývod, aby si viacero vodičov nekonkurovalo na jednom pine.</li>
+ * </ul>
+ * <p>
+ * Výstupné signály (MW_, MR_, IW_, IR_, IA_) sú riadené CPU a premietajú sa na vývody;
+ * vstupné signály (RY, IT) sú riadené obvodom a CPU ich číta zo zbernice.
  *
- * @author Tomáš Hianik (pôvodný autor ControlBusCommunicator), adaptácia pre SchematicSim
+ * @author Tomáš Hianik (pôvodný autor ControlBusCommunicator), adaptácia pre SchematicSim,
+ *         redizajn na lištovú zbernicu (Claude)
  */
 public class ControlBus extends BusSymbol {
 
-    private static final String[] PIN_NAMES = {"MW_", "MR_", "IW_", "IR_", "IA_", "RY", "IT"};
+    private static final String[] SIGNAL_NAMES = {"MW_", "MR_", "IW_", "IR_", "IA_", "RY", "IT"};
 
     // bity riadiacej zbernice (pozri Bus.mapSignal)
-    private static final int[] BIT_OF_PIN = {8, 7, 6, 5, 4, 2, 3};
-    // ktoré vývody sú vstupné (obvod -> CPU) - RY a IT
-    private static final boolean[] INPUT_PIN = {false, false, false, false, false, true, true};
+    private static final int[] BIT_OF_SIGNAL = {8, 7, 6, 5, 4, 2, 3};
+    // ktoré signály sú vstupné (obvod -> CPU) - RY a IT
+    private static final boolean[] INPUT_SIGNAL = {false, false, false, false, false, true, true};
 
-    private Pin[] controlPins;
+    private static final int RAIL_WIDTH = 2;
+    private static final int DEFAULT_ROWS = 12;
+    private static final int MIN_ROWS = 3;
+    private static final int MAX_ROWS = 60;
+
+    private static final Color RAIL_COLOR = Color.DARKGREEN;
+
+    /** Hrúbka čiary relatívne k bunke (vodič má ~6 px, lišta teda o málo hrubšia). */
+    private static final double RAIL_THICKNESS = 0.45;
+
+    private int rows = DEFAULT_ROWS;
+
+    private Pane railPane;
+    private Rectangle line;
+    private Circle resizeHandle;
+    private boolean resizing;
+
+    private List<Pin> pinsRef;
+    private final List<TapPoint> taps = new ArrayList<>();
+
+    private ContextMenu signalMenu;
+    private final RadioMenuItem[] menuItems = new RadioMenuItem[SIGNAL_NAMES.length];
+
+    private volatile boolean visualsScheduled;
 
     private final ChangeListener<Number> onControlBusChange = (obs, oldValue, newValue) -> syncFromBus();
 
@@ -33,58 +88,378 @@ public class ControlBus extends BusSymbol {
     public ControlBus(SchematicSheet sheet) {
         super(sheet);
         getBus().controlBusProperty().addListener(onControlBusChange);
+        initRail();
         syncFromBus();
     }
 
     @Override
     protected List<Pin> createPins() {
-        List<Pin> pins = new java.util.ArrayList<>();
-        Pin[] arr = new Pin[PIN_NAMES.length];
-        for (int index = 0; index < arr.length; index++) {
-            arr[index] = createBusPin(PIN_NAMES[index], index,
-                    INPUT_PIN[index] ? Pin.Direction.INPUT : Pin.Direction.OUTPUT);
-            pins.add(arr[index]);
-        }
-        this.controlPins = arr;
-        return pins;
+        this.pinsRef = new ArrayList<>();
+        return this.pinsRef;
     }
 
     @Override
     protected String getBusLabel() {
-        return "RIADIACA";
+        return "CB";
     }
 
     @Override
     protected String[] getBusPinNames() {
-        return PIN_NAMES;
+        return SIGNAL_NAMES;
+    }
+
+    @Override
+    protected Pane drawBody() {
+        this.railPane = new Pane();
+        return this.railPane;
+    }
+
+    private void initRail() {
+        int cell = getSheet().getGrid().getSizeMin();
+        double railCenterX = RAIL_WIDTH * cell / 2.0;
+        double thickness = Math.max(4, cell * RAIL_THICKNESS);
+
+        line = new Rectangle(railCenterX - thickness / 2.0, 0, thickness, rows * cell);
+        line.setFill(RAIL_COLOR);
+        line.setStroke(Color.BLACK);
+        line.setStrokeWidth(1);
+        line.addEventHandler(MouseEvent.MOUSE_CLICKED, this::handleRailClick);
+        line.addEventHandler(MouseEvent.MOUSE_RELEASED, this::handleRailRelease);
+
+        // neviditeľný rukoväť na zmenu dĺžky - cítiť ho je len kurzorom, samotný nie je vidieť
+        resizeHandle = new Circle(railCenterX, rows * cell, cell * 0.35, Color.TRANSPARENT);
+        resizeHandle.setStroke(Color.TRANSPARENT);
+        resizeHandle.setCursor(Cursor.N_RESIZE);
+        resizeHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
+        resizeHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleResizeDragged);
+        resizeHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
+
+        Text title = new Text(getBusLabel());
+        title.setLayoutX(railCenterX - cell * 0.55);
+        title.setLayoutY(-cell * 0.15);
+        title.setFont(Font.font(cell * 0.6));
+        title.setFill(RAIL_COLOR);
+        title.setMouseTransparent(true);
+
+        railPane.getChildren().addAll(line, title, resizeHandle);
+    }
+
+    /**
+     * Vytvorenie vývodu signal s indexom {@code signal} na riadku s lokálnou súradnicou localY.
+     * Vracia pin vývodu (aby sa naň dal pripojiť test/vodič). Verejné kvôli testom.
+     */
+    public Pin createTap(int signal, int localY) {
+        int cell = getSheet().getGrid().getSizeMin();
+        return createTap(signal, (double) localY);
+    }
+
+    public Pin createTap(int signal, double localY) {
+        int cell = getSheet().getGrid().getSizeMin();
+        double x = RAIL_WIDTH * cell / 2.0;
+        double y = snap(clamp(localY, cell, rows * cell), cell);
+
+        boolean input = INPUT_SIGNAL[signal];
+        TapPin pin = new TapPin(this, SIGNAL_NAMES[signal], input ? Pin.Direction.INPUT : Pin.Direction.OUTPUT);
+        pin.setLayoutX(x);
+        pin.setLayoutY(y);
+        this.getChildren().add(pin);
+
+        Circle dot = new Circle(x, y, cell * 0.28, Color.GRAY);
+        dot.setStroke(Color.BLACK);
+        dot.setStrokeWidth(1);
+        // dot je len vizuálny - myš ide skrz na pin, aby ťahaním z vývodu vzniklo spojenie
+        dot.setMouseTransparent(true);
+
+        Text label = new Text(SIGNAL_NAMES[signal]);
+        label.setLayoutX(x + cell * 0.6);
+        label.setLayoutY(y - cell * 0.4);
+        label.setFont(Font.font(cell * 0.5));
+        label.setFill(RAIL_COLOR);
+        label.setMouseTransparent(true);
+
+        TapPoint tap = new TapPoint(pin, dot, label, signal);
+        getChildren().addAll(dot, label);
+        taps.add(tap);
+        pinsRef.add(pin);
+
+        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje
+        pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
+            if (e.getButton() == MouseButton.SECONDARY) {
+                openSignalMenu(newIndex -> changeTapSignal(tap, newIndex), signal, e.getScreenX(), e.getScreenY());
+            }
+        });
+
+        driveTap(tap);
+        return pin;
+    }
+
+    private void changeTapSignal(TapPoint tap, int signal) {
+        tap.signal = signal;
+        tap.label.setText(SIGNAL_NAMES[signal]);
+        driveTap(tap);
+    }
+
+    private void driveTap(TapPoint tap) {
+        if (INPUT_SIGNAL[tap.signal]) {
+            scheduleTapVisuals();
+            return;
+        }
+        int ctrl = getBus().getControlBus();
+        boolean high = (ctrl & (1 << BIT_OF_SIGNAL[tap.signal])) != 0;
+        setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        scheduleTapVisuals();
+    }
+
+    private void scheduleTapVisuals() {
+        if (visualsScheduled) return;
+        visualsScheduled = true;
+        Platform.runLater(() -> {
+            visualsScheduled = false;
+            int ctrl = getBus().getControlBus();
+            for (TapPoint tap : taps) {
+                boolean high = INPUT_SIGNAL[tap.signal]
+                        ? isHigh(tap.pin)
+                        : (ctrl & (1 << BIT_OF_SIGNAL[tap.signal])) != 0;
+                tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
+            }
+        });
+    }
+
+    // === kliknutie na čiaru / odovzdanie vodiča ===
+
+    private void handleRailClick(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY) return;
+        if (Pin.getInProgressWire() != null) return;
+        final double localY = toLocalY(event);
+        openSignalMenu(signal -> createTap(signal, localY), -1, event.getScreenX(), event.getScreenY());
+    }
+
+    private void handleRailRelease(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY) return;
+        Wire creating = Pin.getInProgressWire();
+        if (creating == null) return;
+        if (creating.areBothEndsConnected()) return;
+
+        final double localY = toLocalY(event);
+        double thickness = Math.max(4, getSheet().getGrid().getSizeMin() * RAIL_THICKNESS);
+        final boolean leftWired = event.getX() < thickness / 2.0;
+
+        openSignalMenu(signal -> {
+            Pin tapPin = createTap(signal, localY);
+            tapPin.setSide(leftWired ? Side.LEFT : Side.RIGHT);
+            creating.catchFreeEnd().connect(tapPin);
+            creating.setMouseTransparent(false);
+            creating.setOpacity(1);
+            Pin.finishInProgressWire();
+        }, -1, event.getScreenX(), event.getScreenY());
+    }
+
+    // === zmena dĺžky čiary ===
+
+    private void handleResizePressed(MouseEvent event) {
+        if (!event.isPrimaryButtonDown()) return;
+        resizing = true;
+        event.consume();
+    }
+
+    private void handleResizeDragged(MouseEvent event) {
+        if (!resizing) return;
+        int cell = getSheet().getGrid().getSizeMin();
+        double localY = toLocalY(event);
+        int newRows = clamp((int) Math.round(localY / cell), MIN_ROWS, MAX_ROWS);
+        if (newRows != rows) {
+            rows = newRows;
+            line.setHeight(rows * cell);
+            resizeHandle.setCenterY(rows * cell);
+        }
+        event.consume();
+    }
+
+    private void handleResizeReleased(MouseEvent event) {
+        if (!resizing) return;
+        resizing = false;
+        event.consume();
+    }
+
+    // === menu výberu signálu ===
+
+    private void openSignalMenu(Consumer<Integer> onSelect, int preselected, double screenX, double screenY) {
+        ContextMenu menu = ensureMenu();
+        for (int i = 0; i < menuItems.length; i++) {
+            final int signal = i;
+            RadioMenuItem item = menuItems[i];
+            item.setSelected(i == preselected);
+            item.setOnAction(event -> {
+                if (onSelect != null) onSelect.accept(signal);
+            });
+        }
+        menu.setOnHidden(event -> cancelInProgressWire());
+        menu.show(railPane, screenX, screenY);
+    }
+
+    private ContextMenu ensureMenu() {
+        if (signalMenu != null) return signalMenu;
+        signalMenu = new ContextMenu();
+        ToggleGroup group = new ToggleGroup();
+        for (int i = 0; i < menuItems.length; i++) {
+            RadioMenuItem item = new RadioMenuItem(SIGNAL_NAMES[i]);
+            item.setToggleGroup(group);
+            menuItems[i] = item;
+            signalMenu.getItems().add(item);
+        }
+        return signalMenu;
+    }
+
+    // === testovacie prístupy (package-private, nepatria do verejného API) ===
+
+    ContextMenu getSignalMenu() {
+        return signalMenu;
+    }
+
+    Rectangle getRailLine() {
+        return line;
+    }
+
+    Circle getResizeHandle() {
+        return resizeHandle;
+    }
+
+    private void cancelInProgressWire() {
+        Wire creating = Pin.getInProgressWire();
+        if (creating != null) {
+            creating.setMouseTransparent(false);
+            creating.setOpacity(1);
+            if (!creating.areBothEndsConnected()) creating.delete();
+            Pin.finishInProgressWire();
+        }
+    }
+
+    // === pomocné ===
+
+    private double toLocalY(MouseEvent event) {
+        // lišta aj rukoväť majú lokálny počiatok v ľavom hornom rohu súčiastky,
+        // takže getY() udalosti je priamo súradnica v lokálnom priestore súčiastky
+        return event.getY();
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static double snap(double value, double cell) {
+        return Math.round(value / cell) * cell;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     @Override
     public void syncFromBus() {
-        if (controlPins == null) return;
-        int ctrl = getBus().getControlBus();
-        for (int index = 0; index < controlPins.length; index++) {
-            if (INPUT_PIN[index]) continue; // vstupné signály sa nenastavujú zo zbernice
-            boolean high = (ctrl & (1 << BIT_OF_PIN[index])) != 0;
-            setPin(controlPins[index], high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        for (TapPoint tap : taps) {
+            driveTap(tap);
+        }
+    }
+
+    /**
+     * Nastavenie počtu riadkov (dĺžky) lištovej zbernice. Ekvivalent potiahnutia rukoväťa.
+     */
+    public void setRows(int newRows) {
+        int cell = getSheet().getGrid().getSizeMin();
+        int clamped = clamp(newRows, MIN_ROWS, MAX_ROWS);
+        rows = clamped;
+        line.setHeight(clamped * cell);
+        resizeHandle.setCenterY(clamped * cell);
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("rows", Integer.toString(rows));
+
+        StringBuilder tapsValue = new StringBuilder();
+        for (TapPoint tap : taps) {
+            if (tapsValue.length() > 0) tapsValue.append(';');
+            tapsValue.append(tap.signal).append(':').append(Math.round(tap.pin.getLayoutY()));
+        }
+        properties.put("taps", tapsValue.toString());
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        String rowsValue = properties.get("rows");
+        if (rowsValue != null) {
+            try {
+                setRows(Integer.parseInt(rowsValue.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        String tapsValue = properties.get("taps");
+        if (tapsValue != null && !tapsValue.isEmpty()) {
+            for (String entry : tapsValue.split(";")) {
+                String[] part = entry.split(":");
+                if (part.length != 2) continue;
+                try {
+                    int signal = Integer.parseInt(part[0].trim());
+                    double y = Double.parseDouble(part[1].trim());
+                    createTap(signal, y);
+                } catch (NumberFormatException ignored) {
+                }
+            }
         }
     }
 
     @Override
     public void simulate() {
-        if (controlPins == null) return;
         // simulujeme zápis na zbernicu pre vstupné signály (RY, IT)
-        for (int index = 0; index < controlPins.length; index++) {
-            if (!INPUT_PIN[index]) continue;
-            boolean high = isHigh(controlPins[index]);
-            if (BIT_OF_PIN[index] == 2) getBus().setRY(high);
-            else if (BIT_OF_PIN[index] == 3) getBus().setIT(high);
+        boolean ry = false;
+        boolean it = false;
+        for (TapPoint tap : taps) {
+            if (!INPUT_SIGNAL[tap.signal]) continue;
+            if (!isHigh(tap.pin)) continue;
+            if (BIT_OF_SIGNAL[tap.signal] == 2) ry = true;
+            else if (BIT_OF_SIGNAL[tap.signal] == 3) it = true;
         }
+        getBus().setRY(ry);
+        getBus().setIT(it);
     }
 
     @Override
     public void reset() {
-        if (controlPins == null) return;
-        for (Pin p : controlPins) p.setState(Pin.PinState.NOT_CONNECTED);
+        for (TapPoint tap : taps) {
+            tap.pin.setState(Pin.PinState.NOT_CONNECTED);
+        }
+    }
+
+    @Override
+    public int getGridWidth() {
+        return RAIL_WIDTH;
+    }
+
+    @Override
+    public int getGridHeight() {
+        return rows;
+    }
+
+    private static class TapPoint {
+        final Pin pin;
+        final Circle dot;
+        final Text label;
+        int signal;
+
+        TapPoint(Pin pin, Circle dot, Text label, int signal) {
+            this.pin = pin;
+            this.dot = dot;
+            this.label = label;
+            this.signal = signal;
+        }
+    }
+
+    private static class TapPin extends Pin {
+        TapPin(ControlBus owner, String name, Direction direction) {
+            super(owner, name, direction, 0, 0, Side.RIGHT);
+        }
     }
 }
