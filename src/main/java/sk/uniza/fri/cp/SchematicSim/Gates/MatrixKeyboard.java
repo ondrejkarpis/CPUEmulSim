@@ -1,13 +1,20 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.geometry.VPos;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextFormatter;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
@@ -17,14 +24,19 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Matricová klávesnica 4x4 - štyri vstupné riadky ({@code R0}..{@code R3}, vľavo) a štyri
  * výstupné stĺpce ({@code C0}..{@code C3}, hore). Každá z šestnástich kláves sa správa rovnako
- * ako samotné tlačidlo. Pravým tlačidlom myši sa otvorí kontextové menu s položkou
+ * ako samotné tlačidlo. Štandardné labely kláves sú (zľava doprava, zdola hore)
+ * {@code 0123456789ABCDEF}. Pravým tlačidlom myši sa otvorí kontextové menu s položkou
  * {@code Toggle}: ak je zapnutá, každé ľavé stlačenie klávesu trvalo prepne (latch),
- * ak je vypnutá, klávesa je stlačená len počas držania myši.
+ * ak je vypnutá, klávesa je stlačená len počas držania myši. Položka {@code Label} umožní
+ * vpísať jedno písmeno na klávesu, na ktorej bolo pravé tlačidlo myši stlačené (určí sa
+ * podľa polohy myši).
  * Ak je stlačená niektorá klávesa v stĺpci a jej riadok je v logickej 0, výstup stĺpca sa
  * pretiahne na 0, inak je na 1 (slabý pull-up). Výstupy sú typu {@link PinType#WEAK_OUT} -
  * silný push-pull vodič na sieti ich vždy pretiahne, klávesnica nemôže spôsobiť skrat.
@@ -39,17 +51,23 @@ public class MatrixKeyboard extends GateSymbol {
     private static final int KEY_GRID = 2;
     private static final int GRID_WIDTH = COLS * KEY_GRID + 1;
     private static final int GRID_HEIGHT = ROWS * KEY_GRID + 1;
+    /** Štandardné labely kláves - zľava doprava, zdola hore. */
+    private static final String DEFAULT_LABELS = "0123456789ABCDEF";
 
     private Pin[] pinIn;
     private Pin[] pinOut;
     private Circle[][] keyPlungers;
     private boolean[][] keyOn;
+    private String[][] keyLabels;
+    private Text[][] keyLabelTexts;
     private ContextMenu contextMenu;
     private CheckMenuItem toggleItem;
 
     private volatile int pressedRow = -1;
     private volatile int pressedCol = -1;
     private volatile boolean toggle = false;
+    private volatile int menuRow = -1;
+    private volatile int menuCol = -1;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public MatrixKeyboard() {
@@ -67,6 +85,14 @@ public class MatrixKeyboard extends GateSymbol {
         // z konštruktora GateSymbol ešte PRED spustením inštancových inicializátorov
         keyPlungers = new Circle[ROWS][COLS];
         keyOn = new boolean[ROWS][COLS];
+        keyLabels = new String[ROWS][COLS];
+        keyLabelTexts = new Text[ROWS][COLS];
+        // štandardné labely: zľava doprava, zdola hore = 0123456789ABCDEF
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                keyLabels[row][col] = String.valueOf(DEFAULT_LABELS.charAt((ROWS - 1 - row) * COLS + col));
+            }
+        }
 
         List<Pin> pins = new ArrayList<>(ROWS + COLS);
         pinIn = new Pin[ROWS];
@@ -93,7 +119,7 @@ public class MatrixKeyboard extends GateSymbol {
         // klávesy v matici 4x4 - každá klávesa má veľkosť/štýl samostatného tlačidla (2x2 bunky);
         // ľavým tlačidlom sa stláča - pri zapnutom Toggle sa každé stlačenie prepne (trvalo),
         // pri vypnutom je stlačená len počas držania myši. Pravým tlačidlom sa otvorí
-        // kontextové menu s položkou Toggle.
+        // kontextové menu (Toggle + Label pre klávesu pod kurzorom).
         for (int row = 0; row < ROWS; row++) {
             for (int col = 0; col < COLS; col++) {
                 double bx = (1 + col * KEY_GRID) * cell;
@@ -119,7 +145,7 @@ public class MatrixKeyboard extends GateSymbol {
                             setPressed(r, c);
                         }
                     } else if (event.getButton() == MouseButton.SECONDARY) {
-                        if (getSheet() != null) showMenu(event.getScreenX(), event.getScreenY());
+                        if (getSheet() != null) showMenu(event.getScreenX(), event.getScreenY(), r, c);
                         event.consume();
                     }
                 });
@@ -131,28 +157,59 @@ public class MatrixKeyboard extends GateSymbol {
                 key.setOnContextMenuRequested(event -> {
                     if (getSheet() == null) return;
                     if (contextMenu == null || !contextMenu.isShowing()) {
-                        showMenu(event.getScreenX(), event.getScreenY());
+                        showMenu(event.getScreenX(), event.getScreenY(), r, c);
                     }
                     event.consume();
                 });
+
+                // písmeno klávesy - biela farba, vystredené v rámci klávesy
+                Text keyLabel = new Text(keyLabels[r][c]);
+                keyLabel.setFill(Color.WHITE);
+                keyLabel.setFont(Font.font(cell * 0.7));
+                keyLabel.setTextOrigin(VPos.CENTER);
+                keyLabel.setMouseTransparent(true);
+                keyLabel.setLayoutY(by + cell);
+                keyLabel.setLayoutX(bx + cell - keyLabel.getBoundsInLocal().getWidth() / 2.0);
+
                 keyPlungers[row][col] = key;
-                pane.getChildren().addAll(keyBody, key);
+                keyLabelTexts[row][col] = keyLabel;
+                pane.getChildren().addAll(keyBody, key, keyLabel);
             }
         }
 
         return pane;
     }
 
-    private void showMenu(double screenX, double screenY) {
+    private void showMenu(double screenX, double screenY, int row, int col) {
+        menuRow = row;
+        menuCol = col;
         if (contextMenu == null) {
             toggleItem = new CheckMenuItem("Toggle");
             toggleItem.setSelected(toggle);
             toggleItem.setOnAction(e -> setToggle(toggleItem.isSelected()));
-            contextMenu = new ContextMenu(toggleItem);
+
+            MenuItem labelItem = new MenuItem("Label…");
+            labelItem.setOnAction(e -> showLabelDialog());
+
+            contextMenu = new ContextMenu(toggleItem, new SeparatorMenuItem(), labelItem);
         } else {
             toggleItem.setSelected(toggle);
         }
-        contextMenu.show(keyPlungers[0][0], screenX, screenY);
+        contextMenu.show(keyPlungers[row][col], screenX, screenY);
+    }
+
+    private void showLabelDialog() {
+        int row = menuRow;
+        int col = menuCol;
+        if (row < 0 || col < 0) return;
+
+        TextInputDialog dialog = new TextInputDialog(keyLabels[row][col]);
+        dialog.setTitle("Label klávesy");
+        dialog.setHeaderText(null);
+        dialog.setContentText("Zadaj jedno písmeno:");
+        dialog.getEditor().setTextFormatter(new TextFormatter<String>(change ->
+                change.getControlNewText().length() <= 1 ? change : null));
+        dialog.showAndWait().ifPresent(s -> setKeyLabel(row, col, s));
     }
 
     private boolean isActiveKey(int row, int col) {
@@ -258,6 +315,57 @@ public class MatrixKeyboard extends GateSymbol {
     }
 
     /**
+     * Nastavenie popisu klávesy - jedno písmeno zobrazené bielou farbou. Prázdny reťazec
+     * label odstráni.
+     */
+    public void setKeyLabel(int row, int col, String value) {
+        if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+        keyLabels[row][col] = value == null ? "" : value;
+        Text label = keyLabelTexts[row][col];
+        if (label != null) {
+            double cell = getSheet().getGrid().getSizeMin();
+            label.setText(keyLabels[row][col]);
+            label.setLayoutX((1 + col * KEY_GRID) * cell + cell - label.getBoundsInLocal().getWidth() / 2.0);
+        }
+    }
+
+    public String getKeyLabel(int row, int col) {
+        if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return "";
+        return keyLabels[row][col];
+    }
+
+    public boolean isContextMenuShowing() {
+        return contextMenu != null && contextMenu.isShowing();
+    }
+
+    @Override
+    public Map<String, String> saveProperties() {
+        Map<String, String> properties = new LinkedHashMap<>();
+        // štandardné labely sa neukladajú - iba odlišnosti
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                String def = String.valueOf(DEFAULT_LABELS.charAt((ROWS - 1 - row) * COLS + col));
+                if (!keyLabels[row][col].equals(def)) {
+                    properties.put("label" + (row * COLS + col), keyLabels[row][col]);
+                }
+            }
+        }
+        return properties;
+    }
+
+    @Override
+    public void loadProperties(Map<String, String> properties) {
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                String label = properties.get("label" + (row * COLS + col));
+                if (label != null) {
+                    setKeyLabel(row, col, label);
+                }
+            }
+        }
+    }
+
+    /**
      * Aktualizácia vizuálu vždy na FX vlákne (simulácia beží na separátnom vlákne).
      * Zmeny sú skoalescované do jednej čakajúcej úlohy.
      */
@@ -279,10 +387,6 @@ public class MatrixKeyboard extends GateSymbol {
         });
     }
 
-    public boolean isContextMenuShowing() {
-        return contextMenu != null && contextMenu.isShowing();
-    }
-
     @Override
     public int getGridWidth() {
         return GRID_WIDTH;
@@ -300,6 +404,6 @@ public class MatrixKeyboard extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Klávesnica 4x4 - riadky R0-R3 (vľavo), stĺpce C0-C3 (hore); ľavým tlačidlom stlač, pravým tlačidlom Toggle (trvalé prepínanie)";
+        return "Klávesnica 4x4 - riadky R0-R3 (vľavo), stĺpce C0-C3 (hore); ľavým tlačidlom stlač, pravým tlačidlom Toggle a Label";
     }
 }
