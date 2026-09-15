@@ -17,9 +17,7 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Matricová klávesnica 4x4 - štyri vstupné riadky ({@code R0}..{@code R3}, vľavo) a štyri
@@ -283,21 +281,6 @@ public class MatrixKeyboard extends GateSymbol {
 
     public boolean isContextMenuShowing() {
         return contextMenu != null && contextMenu.isShowing();
-    }
-
-    @Override
-    public Map<String, String> saveProperties() {
-        Map<String, String> properties = new LinkedHashMap<>();
-        properties.put("toggle", String.valueOf(toggle));
-        return properties;
-    }
-
-    @Override
-    public void loadProperties(Map<String, String> properties) {
-        String toggle = properties.get("toggle");
-        if (toggle != null) {
-            setToggle(Boolean.parseBoolean(toggle));
-        }
     }
 
     @Override
