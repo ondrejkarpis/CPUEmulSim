@@ -89,6 +89,7 @@ public class DataBus8 extends BusSymbol {
 
     private ContextMenu signalMenu;
     private MenuItem allMenuItem;
+    private MenuItem deleteMenuItem;
     private final RadioMenuItem[] menuItems = new RadioMenuItem[8];
 
     private volatile boolean visualsScheduled;
@@ -218,10 +219,11 @@ public class DataBus8 extends BusSymbol {
         taps.add(tap);
         pinsRef.add(pin);
 
-        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje
+        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje,
+        // alebo ho zmazať zo zbernice
         pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
             if (e.getButton() == MouseButton.SECONDARY) {
-                openSignalMenu(newBit -> changeTapBit(tap, newBit), this::createAllTaps, bit, e.getScreenX(), e.getScreenY());
+                openSignalMenu(newBit -> changeTapBit(tap, newBit), this::createAllTaps, bit, e.getScreenX(), e.getScreenY(), () -> deleteTap(tap));
             }
         });
 
@@ -307,7 +309,7 @@ public class DataBus8 extends BusSymbol {
         if (event.getButton() != MouseButton.PRIMARY) return;
         if (Pin.getInProgressWire() != null) return;
         final double localY = toLocalY(event);
-        openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY());
+        openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY(), null);
     }
 
     private void handleRailRelease(MouseEvent event) {
@@ -336,7 +338,7 @@ public class DataBus8 extends BusSymbol {
                 creating.setOpacity(1);
                 Pin.finishInProgressWire();
             }
-        }, -1, event.getScreenX(), event.getScreenY());
+        }, -1, event.getScreenX(), event.getScreenY(), null);
     }
 
     // === zmena dĺžky čiary ===
@@ -368,8 +370,17 @@ public class DataBus8 extends BusSymbol {
 
     // === menu výberu vývodu ===
 
-    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY) {
+    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY, Runnable onDelete) {
         ContextMenu menu = ensureMenu();
+        MenuItem deleteItem = ensureDeleteMenuItem();
+        if (onDelete != null) {
+            if (menu.getItems().isEmpty() || menu.getItems().get(0) != deleteItem) {
+                menu.getItems().add(0, deleteItem);
+            }
+            deleteItem.setOnAction(event -> onDelete.run());
+        } else {
+            menu.getItems().remove(deleteItem);
+        }
         allMenuItem.setOnAction(event -> {
             if (onSelectAll != null) onSelectAll.run();
         });
@@ -383,6 +394,25 @@ public class DataBus8 extends BusSymbol {
         }
         menu.setOnHidden(event -> cancelInProgressWire());
         menu.show(railPane, screenX, screenY);
+    }
+
+    private MenuItem ensureDeleteMenuItem() {
+        if (deleteMenuItem == null) {
+            deleteMenuItem = new MenuItem("Zmazať");
+        }
+        return deleteMenuItem;
+    }
+
+    /**
+     * Odstránenie vývodu "D{bit}" zo zbernice vrátane vodiča pripojeného na jeho koniec.
+     */
+    private void deleteTap(TapPoint tap) {
+        if (tap.pin.getWireEnd() != null) {
+            tap.pin.getWireEnd().getWire().delete();
+        }
+        getChildren().removeAll(tap.pin, tap.dot, tap.label);
+        taps.remove(tap);
+        pinsRef.remove(tap.pin);
     }
 
     private ContextMenu ensureMenu() {
