@@ -1,6 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim;
 
+import javafx.scene.Cursor;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.input.MouseDragEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.Priority;
@@ -41,6 +43,24 @@ public class ItemPicker extends VBox {
     public void registerItem(GateSymbol item) {
         gatesPane.getChildren().add(item);
 
-        item.addEventFilter(MouseEvent.DRAG_DETECTED, event -> item.startFullDrag());
+        // otvorená ruka nad súčiastkou napovedá, že sa dá chytiť
+        item.setCursor(Cursor.OPEN_HAND);
+
+        item.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
+            Cursor dragCursor = Cursor.CLOSED_HAND;
+            item.setCursor(dragCursor);
+            item.setOpacity(0.6); // zmenší sa transparentnosť - je zrejmé, že niečo držíme
+            if (item.getScene() != null) item.getScene().setCursor(dragCursor); // podrž kurzor aj mimo paletky
+            item.startFullDrag();
+        });
+
+        // pri pustení sa vráti bežný stav (kurzor aj priehľadnosť)
+        javafx.event.EventHandler<MouseDragEvent> restore = event -> {
+            item.setCursor(Cursor.OPEN_HAND);
+            item.setOpacity(1.0);
+            if (item.getScene() != null) item.getScene().setCursor(null);
+        };
+        item.addEventFilter(MouseDragEvent.MOUSE_DRAG_RELEASED, restore);
+        item.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> restore.handle(null));
     }
 }
