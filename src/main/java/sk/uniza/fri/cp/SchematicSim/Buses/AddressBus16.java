@@ -314,7 +314,7 @@ public class AddressBus16 extends BusSymbol {
         if (!resizing) return;
         int cell = getSheet().getGrid().getSizeMin();
         double localY = toLocalY(event);
-        int newRows = clamp((int) Math.round(localY / cell), MIN_ROWS, MAX_ROWS);
+        int newRows = clamp((int) Math.round(localY / cell), Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         if (newRows != rows) {
             rows = newRows;
             line.setHeight(rows * cell);
@@ -419,10 +419,23 @@ public class AddressBus16 extends BusSymbol {
      */
     public void setRows(int newRows) {
         int cell = getSheet().getGrid().getSizeMin();
-        int clamped = clamp(newRows, MIN_ROWS, MAX_ROWS);
+        int clamped = clamp(newRows, Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         rows = clamped;
         line.setHeight(clamped * cell);
         resizeHandle.setCenterY(clamped * cell);
+    }
+
+    /**
+     * Najmenší možný počet riadkov tak, aby bola lišta stále pod všetkými vývodmi
+     * (plus rezervný riadok kvôli rukoväti na zmenu dĺžky).
+     */
+    private int minRowsForTaps() {
+        int cell = getSheet().getGrid().getSizeMin();
+        int maxRow = 0;
+        for (TapPoint tap : taps) {
+            maxRow = Math.max(maxRow, (int) Math.round(tap.pin.getLayoutY() / cell));
+        }
+        return maxRow + 1;
     }
 
     @Override
