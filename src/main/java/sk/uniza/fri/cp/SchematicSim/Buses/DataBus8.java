@@ -4,7 +4,9 @@ import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.scene.Cursor;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
@@ -21,9 +23,11 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -79,6 +83,7 @@ public class DataBus8 extends BusSymbol {
     private final List<TapPoint> taps = new ArrayList<>();
 
     private ContextMenu signalMenu;
+    private MenuItem allMenuItem;
     private final RadioMenuItem[] menuItems = new RadioMenuItem[8];
 
     private volatile boolean visualsScheduled;
@@ -195,7 +200,7 @@ public class DataBus8 extends BusSymbol {
         // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje
         pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
             if (e.getButton() == MouseButton.SECONDARY) {
-                openSignalMenu(newBit -> changeTapBit(tap, newBit), bit, e.getScreenX(), e.getScreenY());
+                openSignalMenu(newBit -> changeTapBit(tap, newBit), this::createAllTaps, bit, e.getScreenX(), e.getScreenY());
             }
         });
 
@@ -231,13 +236,54 @@ public class DataBus8 extends BusSymbol {
         });
     }
 
+    /**
+     * Vytvorenie vývodov pre všetky bity zbernice naraz. Vynecháva bity, ktoré už vývod majú,
+     * a nové vývody umiestni na prvé voľné riadky (aby neprekrývali už existujúce). Ak je lišta
+     * príliš krátka, predĺži ju. Vracia prvý vytvorený vývod (alebo prvý už
+     * existujúci), aby sa naň dal pripojiť ťahaný vodič.
+     */
+    private Pin createAllTaps() {
+        int cell = getSheet().getGrid().getSizeMin();
+        int count = menuItems.length;
+        Pin first = null;
+        Set<Integer> usedRows = new HashSet<>();
+        for (TapPoint tap : taps) {
+            usedRows.add((int) Math.round(tap.pin.getLayoutY() / cell));
+        }
+        int nextFreeRow = 1;
+        for (int i = 0; i < count; i++) {
+            if (hasTap(i)) continue;
+            while (usedRows.contains(nextFreeRow)) {
+                nextFreeRow++;
+            }
+            if (nextFreeRow >= rows) {
+                setRows(nextFreeRow + 1);
+            }
+            usedRows.add(nextFreeRow);
+            Pin pin = createTap(i, nextFreeRow * cell);
+            if (first == null) first = pin;
+            nextFreeRow++;
+        }
+        if (first == null && !pinsRef.isEmpty()) {
+            first = pinsRef.get(0);
+        }
+        return first;
+    }
+
+    private boolean hasTap(int bit) {
+        for (TapPoint tap : taps) {
+            if (tap.bit == bit) return true;
+        }
+        return false;
+    }
+
     // === kliknutie na čiaru / odovzdanie vodiča ===
 
     private void handleRailClick(MouseEvent event) {
         if (event.getButton() != MouseButton.PRIMARY) return;
         if (Pin.getInProgressWire() != null) return;
         final double localY = toLocalY(event);
-        openSignalMenu(bit -> createTap(bit, localY), -1, event.getScreenX(), event.getScreenY());
+        openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY());
     }
 
     private void handleRailRelease(MouseEvent event) {
@@ -257,6 +303,15 @@ public class DataBus8 extends BusSymbol {
             creating.setMouseTransparent(false);
             creating.setOpacity(1);
             Pin.finishInProgressWire();
+        }, () -> {
+            Pin tapPin = createAllTaps();
+            if (tapPin != null) {
+                tapPin.setSide(leftWired ? Side.LEFT : Side.RIGHT);
+                creating.catchFreeEnd().connect(tapPin);
+                creating.setMouseTransparent(false);
+                creating.setOpacity(1);
+                Pin.finishInProgressWire();
+            }
         }, -1, event.getScreenX(), event.getScreenY());
     }
 
@@ -289,8 +344,11 @@ public class DataBus8 extends BusSymbol {
 
     // === menu výberu vývodu ===
 
-    private void openSignalMenu(Consumer<Integer> onSelect, int preselected, double screenX, double screenY) {
+    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY) {
         ContextMenu menu = ensureMenu();
+        allMenuItem.setOnAction(event -> {
+            if (onSelectAll != null) onSelectAll.run();
+        });
         for (int i = 0; i < menuItems.length; i++) {
             final int bit = i;
             RadioMenuItem item = menuItems[i];
@@ -306,6 +364,8 @@ public class DataBus8 extends BusSymbol {
     private ContextMenu ensureMenu() {
         if (signalMenu != null) return signalMenu;
         signalMenu = new ContextMenu();
+        allMenuItem = new MenuItem("Všetky");
+        signalMenu.getItems().addAll(allMenuItem, new SeparatorMenuItem());
         ToggleGroup group = new ToggleGroup();
         for (int i = 0; i < menuItems.length; i++) {
             RadioMenuItem item = new RadioMenuItem("D" + i);
