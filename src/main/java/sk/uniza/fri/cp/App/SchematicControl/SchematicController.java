@@ -33,7 +33,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
-import sk.uniza.fri.cp.SchematicSim.Gates.Ram256;
+import sk.uniza.fri.cp.SchematicSim.Gates.Ram8k;
 import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
 import sk.uniza.fri.cp.SchematicSim.Gates.MatrixKeyboard;
@@ -172,7 +172,7 @@ public class SchematicController {
 
         //ostatné zariadenia
         picker.registerItem(new Register8());
-        picker.registerItem(new Ram256());
+        picker.registerItem(new Ram8k());
     }
 
     private ToolBar buildToolbar() {
