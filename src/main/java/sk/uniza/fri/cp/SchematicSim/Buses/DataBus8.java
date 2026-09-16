@@ -20,6 +20,8 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.Bus.Bus;
+import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -249,7 +251,10 @@ public class DataBus8 extends BusSymbol {
         Platform.runLater(() -> {
             visualsScheduled = false;
             for (TapPoint tap : taps) {
-                boolean high = tap.pin.getState() == Pin.PinState.HIGH;
+                // kružok ukazuje rozlíšenú hodnotu celej siete (silný vodič na sieti
+                // pretiahne slabú hodnotu zbernice), nie stav, ktorý si pin nastavila samotná zbernica
+                boolean high = tap.pin.getPotential() != null
+                        && tap.pin.getPotential().getValue() == Potential.Value.HIGH;
                 tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
             }
         });
@@ -587,6 +592,9 @@ public class DataBus8 extends BusSymbol {
                 driveTap(tap);
             }
         }
+        // pri zmene siete (iná súčiastka pretiahla slabú hodnotu zbernice) sa simulate()
+        // pre compare vyvolá cez getGatesWithInputs - obnov preto aj vizuál kružkov
+        scheduleTapVisuals();
     }
 
     @Override
@@ -623,6 +631,9 @@ public class DataBus8 extends BusSymbol {
     private static class TapPin extends Pin {
         TapPin(DataBus8 owner, String name, int index) {
             super(owner, name, Direction.INOUT, 0, 0, Side.RIGHT);
+            // slabý výstup: náhodné/udržiavané dáta zbernice nepretiahnu silný vodič
+            // (OUT/IO/TRI_OUT) pripojený k tej istej sieti - ten vyhráva
+            getOwnedPotential().setType(PinType.WEAK_OUT);
         }
     }
 }

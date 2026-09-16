@@ -203,7 +203,7 @@ public class SchematicController {
 
         toolbar.getItems().addAll(btnNew, btnLoad, btnSave, btnSaveAs,
                 new Label(" | "),
-                new Label("  |  "), new Label("Zapnuté:"), this.tsPower,
+                new Label("  |  "), new Label("On/Off:"), this.tsPower,
                 new Label("  |  "), new Label("Debug:"), this.tsDebug,
                 spacer, this.btnF5spusti, this.btnF7krok, this.btnF9pauza,
                 this.btnF10stop, this.btnF12reset);

@@ -221,6 +221,7 @@ public class Switch extends GateSymbol {
     public Map<String, String> saveProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("pinSide", outPin.getExitSide().name());
+        properties.put("state", on ? "1" : "0");
         return properties;
     }
 
@@ -232,6 +233,11 @@ public class Switch extends GateSymbol {
                 placeOutput(Side.valueOf(side));
             } catch (IllegalArgumentException ignored) {
             }
+        }
+
+        String state = properties.get("state");
+        if (state != null) {
+            setOn("1".equals(state));
         }
     }
 

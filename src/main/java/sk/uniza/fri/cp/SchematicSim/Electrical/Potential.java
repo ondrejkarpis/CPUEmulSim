@@ -68,10 +68,10 @@ public class Potential {
      */
     public void getGatesWithInputs(Set<GateSymbol> setToFill) {
         if (this.parent1 == null && this.parent2 == null) {
-            if (this.node1 instanceof Pin && (this.type == PinType.IN || this.type == PinType.IO)) {
+            if (this.node1 instanceof Pin && (this.type == PinType.IN || this.type == PinType.IO || this.type == PinType.WEAK_OUT)) {
                 setToFill.add(((Pin) this.node1).getOwner());
             }
-            if (this.node2 instanceof Pin && (this.type == PinType.IN || this.type == PinType.IO)) {
+            if (this.node2 instanceof Pin && (this.type == PinType.IN || this.type == PinType.IO || this.type == PinType.WEAK_OUT)) {
                 setToFill.add(((Pin) this.node2).getOwner());
             }
         } else {
