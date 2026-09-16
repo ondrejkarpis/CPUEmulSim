@@ -1,15 +1,19 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Menu;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -55,6 +59,22 @@ public class Led extends GateSymbol {
     /** Konštruktor pre paletku (ItemPicker). */
     public Led() {
         super();
+    }
+
+    @Override
+    public Pane getImage() {
+        Text label = new Text(getName());
+        label.setLayoutY(label.getBoundsInLocal().getHeight());
+
+        Image image = new Image(getClass().getResourceAsStream("/icons/led.png"));
+        ImageView view = new ImageView(image);
+        view.setLayoutY(label.getBoundsInLocal().getHeight() + 5);
+
+        label.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (image.getWidth() - label.getBoundsInLocal().getWidth()) / 2.0,
+                image.widthProperty(), label.boundsInLocalProperty()));
+
+        return new Pane(label, view);
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */

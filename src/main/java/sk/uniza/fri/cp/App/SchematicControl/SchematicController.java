@@ -151,26 +151,28 @@ public class SchematicController {
      * Registrácia súčiastok do paletky.
      */
     private void registerItems(ItemPicker picker) {
-        //logické hradlá
-        picker.registerItem(new AndGate());
-        picker.registerItem(new OrGate());
-        picker.registerItem(new NandGate());
-        picker.registerItem(new NorGate());
-        picker.registerItem(new NotGate());
-
-        //zariadenia komunikujúce so zbernicou CPU
-        picker.registerItem(new Ram256());
-        picker.registerItem(new Led());
-        picker.registerItem(new SevenSegmentDisplay());
-        picker.registerItem(new Switch());
-        picker.registerItem(new PushButton());
-        picker.registerItem(new MatrixKeyboard());
-        picker.registerItem(new Register8());
-
         //zbernice
         picker.registerItem(new AddressBus16());
         picker.registerItem(new DataBus8());
         picker.registerItem(new ControlBus());
+
+        //zariadenia komunikujúce so zbernicou CPU
+        picker.registerItem(new Switch());
+        picker.registerItem(new Led());
+        picker.registerItem(new PushButton());
+        picker.registerItem(new MatrixKeyboard());
+        picker.registerItem(new SevenSegmentDisplay());
+
+        //logické hradlá
+        picker.registerItem(new NotGate());
+        picker.registerItem(new AndGate());
+        picker.registerItem(new OrGate());
+        picker.registerItem(new NandGate());
+        picker.registerItem(new NorGate());
+
+        //ostatné zariadenia
+        picker.registerItem(new Register8());
+        picker.registerItem(new Ram256());
     }
 
     private ToolBar buildToolbar() {

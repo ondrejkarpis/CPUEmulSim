@@ -1,6 +1,7 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.geometry.VPos;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
@@ -8,6 +9,8 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
@@ -72,6 +75,22 @@ public class MatrixKeyboard extends GateSymbol {
     /** Konštruktor pre paletku (ItemPicker). */
     public MatrixKeyboard() {
         super();
+    }
+
+    @Override
+    public Pane getImage() {
+        Text label = new Text(getName());
+        label.setLayoutY(label.getBoundsInLocal().getHeight());
+
+        Image image = new Image(getClass().getResourceAsStream("/icons/klavesnica.png"));
+        ImageView view = new ImageView(image);
+        view.setLayoutY(label.getBoundsInLocal().getHeight() + 5);
+
+        label.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (image.getWidth() - label.getBoundsInLocal().getWidth()) / 2.0,
+                image.widthProperty(), label.boundsInLocalProperty()));
+
+        return new Pane(label, view);
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */

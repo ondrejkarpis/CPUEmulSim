@@ -1,5 +1,8 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
+import javafx.beans.binding.Bindings;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -38,6 +41,22 @@ public class Ram256 extends GateSymbol {
     /** Konštruktor pre paletku (ItemPicker). */
     public Ram256() {
         super();
+    }
+
+    @Override
+    public Pane getImage() {
+        Text label = new Text("8kB RAM");
+        label.setLayoutY(label.getBoundsInLocal().getHeight());
+
+        Image image = new Image(getClass().getResourceAsStream("/icons/ram.png"));
+        ImageView view = new ImageView(image);
+        view.setLayoutY(label.getBoundsInLocal().getHeight() + 5);
+
+        label.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (image.getWidth() - label.getBoundsInLocal().getWidth()) / 2.0,
+                image.widthProperty(), label.boundsInLocalProperty()));
+
+        return new Pane(label, view);
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */
