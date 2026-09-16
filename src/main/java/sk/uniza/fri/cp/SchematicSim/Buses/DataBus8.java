@@ -249,7 +249,7 @@ public class DataBus8 extends BusSymbol {
         Platform.runLater(() -> {
             visualsScheduled = false;
             for (TapPoint tap : taps) {
-                boolean high = isHigh(tap.pin);
+                boolean high = tap.pin.getState() == Pin.PinState.HIGH;
                 tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
             }
         });
@@ -518,16 +518,14 @@ public class DataBus8 extends BusSymbol {
     }
 
     private void handleDataChange() {
-        // ak nie je zapnuté čítanie -> riadime sa podľa dát na zbernici (zápis / pasívny stav)
-        if ((getBus().getControlBus() & 0xB0) == 0xB0) {
-            this.data = Byte.toUnsignedInt(getBus().getDataBus());
-            if (write) {
-                for (TapPoint tap : taps) {
-                    driveTap(tap);
-                }
-            }
-        }
         // pri čítaní sa riadime iba podľa simulácie (obvod odpovedá na zbernicu)
+        if ((getBus().getControlBus() & 0xB0) != 0xB0) return;
+        this.data = Byte.toUnsignedInt(getBus().getDataBus());
+        for (TapPoint tap : taps) {
+            boolean high = (data & (1 << tap.bit)) != 0;
+            setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        }
+        scheduleTapVisuals();
     }
 
     private void handleControlChange() {
@@ -543,12 +541,9 @@ public class DataBus8 extends BusSymbol {
                 driveTap(tap);
             }
         } else if (!writeActive && write) {
-            // koniec zápisu - vývody odpojíme (obvod si dáta už zachytil)
+            // koniec zápisu - dáta na vývodoch necháme podržané; zmenia sa až pri setRandomData()
             write = false;
             Bus.getBus().dataIsChanging();
-            for (TapPoint tap : taps) {
-                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
-            }
         }
 
         if (readActive && !read) {
