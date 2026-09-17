@@ -88,6 +88,7 @@ public class DataBus8 extends BusSymbol {
     private final List<TapPoint> taps = new ArrayList<>();
 
     private ContextMenu signalMenu;
+    private ContextMenu deleteMenu;
     private MenuItem allMenuItem;
     private MenuItem deleteMenuItem;
     private final RadioMenuItem[] menuItems = new RadioMenuItem[8];
@@ -157,7 +158,7 @@ public class DataBus8 extends BusSymbol {
         double railCenterX = RAIL_WIDTH * cell / 2.0;
         double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
-        line = new Rectangle(railCenterX - thickness / 2.0, 0, thickness, rows * cell);
+        line = new Rectangle(railCenterX - thickness / 2.0, cell / 2.0, thickness, rows * cell - cell);
         line.setFill(RAIL_COLOR);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(1);
@@ -219,11 +220,10 @@ public class DataBus8 extends BusSymbol {
         taps.add(tap);
         pinsRef.add(pin);
 
-        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje,
-        // alebo ho zmazať zo zbernice
+        // pravým tlačidlom na vývode sa zobrazí menu so zmazaním vývodu zo zbernice
         pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
             if (e.getButton() == MouseButton.SECONDARY) {
-                openSignalMenu(newBit -> changeTapBit(tap, newBit), this::createAllTaps, bit, e.getScreenX(), e.getScreenY(), () -> deleteTap(tap));
+                openDeleteMenu(e.getScreenX(), e.getScreenY(), () -> deleteTap(tap));
             }
         });
 
@@ -309,7 +309,7 @@ public class DataBus8 extends BusSymbol {
         if (event.getButton() != MouseButton.PRIMARY) return;
         if (Pin.getInProgressWire() != null) return;
         final double localY = toLocalY(event);
-        openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY(), null);
+        openSignalMenu(bit -> createTap(bit, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY());
     }
 
     private void handleRailRelease(MouseEvent event) {
@@ -338,7 +338,7 @@ public class DataBus8 extends BusSymbol {
                 creating.setOpacity(1);
                 Pin.finishInProgressWire();
             }
-        }, -1, event.getScreenX(), event.getScreenY(), null);
+        }, -1, event.getScreenX(), event.getScreenY());
     }
 
     // === zmena dĺžky čiary ===
@@ -356,8 +356,9 @@ public class DataBus8 extends BusSymbol {
         int newRows = clamp((int) Math.round(localY / cell), Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         if (newRows != rows) {
             rows = newRows;
-            line.setHeight(rows * cell);
+            line.setHeight(rows * cell - cell);
             resizeHandle.setCenterY(rows * cell);
+            refreshSelectionShape();
         }
         event.consume();
     }
@@ -370,17 +371,8 @@ public class DataBus8 extends BusSymbol {
 
     // === menu výberu vývodu ===
 
-    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY, Runnable onDelete) {
+    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY) {
         ContextMenu menu = ensureMenu();
-        MenuItem deleteItem = ensureDeleteMenuItem();
-        if (onDelete != null) {
-            if (menu.getItems().isEmpty() || menu.getItems().get(0) != deleteItem) {
-                menu.getItems().add(0, deleteItem);
-            }
-            deleteItem.setOnAction(event -> onDelete.run());
-        } else {
-            menu.getItems().remove(deleteItem);
-        }
         allMenuItem.setOnAction(event -> {
             if (onSelectAll != null) onSelectAll.run();
         });
@@ -396,11 +388,22 @@ public class DataBus8 extends BusSymbol {
         menu.show(railPane, screenX, screenY);
     }
 
-    private MenuItem ensureDeleteMenuItem() {
-        if (deleteMenuItem == null) {
-            deleteMenuItem = new MenuItem("Zmazať");
-        }
-        return deleteMenuItem;
+    /**
+     * Kontextové menu otvorené pravým tlačidlom na vývode obsahuje len položku "Zmazať".
+     */
+    private void openDeleteMenu(double screenX, double screenY, Runnable onDelete) {
+        ContextMenu menu = ensureDeleteMenu();
+        deleteMenuItem.setOnAction(event -> onDelete.run());
+        menu.setOnHidden(event -> cancelInProgressWire());
+        menu.show(railPane, screenX, screenY);
+    }
+
+    private ContextMenu ensureDeleteMenu() {
+        if (deleteMenu != null) return deleteMenu;
+        deleteMenu = new ContextMenu();
+        deleteMenuItem = new MenuItem("Zmazať");
+        deleteMenu.getItems().add(deleteMenuItem);
+        return deleteMenu;
     }
 
     /**
@@ -496,8 +499,9 @@ public class DataBus8 extends BusSymbol {
         int cell = getSheet().getGrid().getSizeMin();
         int clamped = clamp(newRows, Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         rows = clamped;
-        line.setHeight(clamped * cell);
+        line.setHeight(clamped * cell - cell);
         resizeHandle.setCenterY(clamped * cell);
+        refreshSelectionShape();
     }
 
     /**

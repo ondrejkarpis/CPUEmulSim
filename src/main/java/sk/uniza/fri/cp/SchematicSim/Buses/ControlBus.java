@@ -38,8 +38,8 @@ import java.util.function.Consumer;
  * Chovanie (rovnako ako {@link AddressBus16}):
  * <ul>
  *     <li>dĺžku čiary možno meniť potiahnutím koncového rukoväťa (spodný koniec myšou);</li>
- *     <li>ľavé kliknutie na čiaru otvorí menu výberu signálu MW_, MR_, IW_, IR_, IA_, RY, IT
- *         a vybraný signál sa pridá na zbernicu ako kruzok (vývod);</li>
+ *     <li>ľavé kliknutie na čiaru otvorí menu výberu signálu MW_, MR_, IW_, IR_, IA_, IT a
+ *         vybraný signál sa pridá na zbernicu ako kruzok (vývod);</li>
  *     <li>natiahnutie spojenia (vodiča) na čiaru a pustenie myši tiež otvorí menu a pripojí vodič;</li>
  *     <li>každý vývod má názov signálu zobrazený nad spojením vedľa zbernice;</li>
  *     <li>z jednej zbernice možno ťahať viac rovnakých signálov - každé odbočenie tvorí
@@ -47,22 +47,22 @@ import java.util.function.Consumer;
  * </ul>
  * <p>
  * Výstupné signály (MW_, MR_, IW_, IR_, IA_) sú riadené CPU a premietajú sa na vývody;
- * vstupné signály (RY, IT) sú riadené obvodom a CPU ich číta zo zbernice.
+ * vstupný signál (IT) je riadený obvodom a CPU ho číta zo zbernice.
  *
  * @author Tomáš Hianik (pôvodný autor ControlBusCommunicator), adaptácia pre SchematicSim,
  *         redizajn na lištovú zbernicu (Claude)
  */
 public class ControlBus extends BusSymbol {
 
-    private static final String[] SIGNAL_NAMES = {"MW_", "MR_", "IW_", "IR_", "IA_", "RY", "IT"};
+    private static final String[] SIGNAL_NAMES = {"MW_", "MR_", "IW_", "IR_", "IA_", "IT"};
 
     // bity riadiacej zbernice (pozri Bus.mapSignal)
-    private static final int[] BIT_OF_SIGNAL = {8, 7, 6, 5, 4, 2, 3};
-    // ktoré signály sú vstupné (obvod -> CPU) - RY a IT
-    private static final boolean[] INPUT_SIGNAL = {false, false, false, false, false, true, true};
+    private static final int[] BIT_OF_SIGNAL = {8, 7, 6, 5, 4, 3};
+    // ktoré signály sú vstupné (obvod -> CPU) - IT
+    private static final boolean[] INPUT_SIGNAL = {false, false, false, false, false, false};
 
     private static final int RAIL_WIDTH = 2;
-    private static final int DEFAULT_ROWS = 8;
+    private static final int DEFAULT_ROWS = 7;
     private static final int MIN_ROWS = 3;
     private static final int MAX_ROWS = 60;
 
@@ -82,6 +82,7 @@ public class ControlBus extends BusSymbol {
     private final List<TapPoint> taps = new ArrayList<>();
 
     private ContextMenu signalMenu;
+    private ContextMenu deleteMenu;
     private MenuItem allMenuItem;
     private MenuItem deleteMenuItem;
     private final RadioMenuItem[] menuItems = new RadioMenuItem[SIGNAL_NAMES.length];
@@ -144,7 +145,7 @@ public class ControlBus extends BusSymbol {
         double railCenterX = RAIL_WIDTH * cell / 2.0;
         double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
-        line = new Rectangle(railCenterX - thickness / 2.0, 0, thickness, rows * cell);
+        line = new Rectangle(railCenterX - thickness / 2.0, cell / 2.0, thickness, rows * cell - cell);
         line.setFill(RAIL_COLOR);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(1);
@@ -207,11 +208,10 @@ public class ControlBus extends BusSymbol {
         taps.add(tap);
         pinsRef.add(pin);
 
-        // pravým tlačidlom na vývode sa dá zmeniť, ktorý signál zbernice reprezentuje,
-        // alebo ho zmazať zo zbernice
+        // pravým tlačidlom na vývode sa zobrazí menu so zmazaním vývodu zo zbernice
         pin.addEventHandler(MouseEvent.MOUSE_PRESSED, e -> {
             if (e.getButton() == MouseButton.SECONDARY) {
-                openSignalMenu(newIndex -> changeTapSignal(tap, newIndex), this::createAllTaps, signal, e.getScreenX(), e.getScreenY(), () -> deleteTap(tap));
+                openDeleteMenu(e.getScreenX(), e.getScreenY(), () -> deleteTap(tap));
             }
         });
 
@@ -298,7 +298,7 @@ public class ControlBus extends BusSymbol {
         if (event.getButton() != MouseButton.PRIMARY) return;
         if (Pin.getInProgressWire() != null) return;
         final double localY = toLocalY(event);
-        openSignalMenu(signal -> createTap(signal, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY(), null);
+        openSignalMenu(signal -> createTap(signal, localY), this::createAllTaps, -1, event.getScreenX(), event.getScreenY());
     }
 
     private void handleRailRelease(MouseEvent event) {
@@ -327,7 +327,7 @@ public class ControlBus extends BusSymbol {
                 creating.setOpacity(1);
                 Pin.finishInProgressWire();
             }
-        }, -1, event.getScreenX(), event.getScreenY(), null);
+        }, -1, event.getScreenX(), event.getScreenY());
     }
 
     // === zmena dĺžky čiary ===
@@ -345,8 +345,9 @@ public class ControlBus extends BusSymbol {
         int newRows = clamp((int) Math.round(localY / cell), Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         if (newRows != rows) {
             rows = newRows;
-            line.setHeight(rows * cell);
+            line.setHeight(rows * cell - cell);
             resizeHandle.setCenterY(rows * cell);
+            refreshSelectionShape();
         }
         event.consume();
     }
@@ -359,17 +360,8 @@ public class ControlBus extends BusSymbol {
 
     // === menu výberu signálu ===
 
-    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY, Runnable onDelete) {
+    private void openSignalMenu(Consumer<Integer> onSelect, Runnable onSelectAll, int preselected, double screenX, double screenY) {
         ContextMenu menu = ensureMenu();
-        MenuItem deleteItem = ensureDeleteMenuItem();
-        if (onDelete != null) {
-            if (menu.getItems().isEmpty() || menu.getItems().get(0) != deleteItem) {
-                menu.getItems().add(0, deleteItem);
-            }
-            deleteItem.setOnAction(event -> onDelete.run());
-        } else {
-            menu.getItems().remove(deleteItem);
-        }
         allMenuItem.setOnAction(event -> {
             if (onSelectAll != null) onSelectAll.run();
         });
@@ -385,11 +377,22 @@ public class ControlBus extends BusSymbol {
         menu.show(railPane, screenX, screenY);
     }
 
-    private MenuItem ensureDeleteMenuItem() {
-        if (deleteMenuItem == null) {
-            deleteMenuItem = new MenuItem("Zmazať");
-        }
-        return deleteMenuItem;
+    /**
+     * Kontextové menu otvorené pravým tlačidlom na vývode obsahuje len položku "Zmazať".
+     */
+    private void openDeleteMenu(double screenX, double screenY, Runnable onDelete) {
+        ContextMenu menu = ensureDeleteMenu();
+        deleteMenuItem.setOnAction(event -> onDelete.run());
+        menu.setOnHidden(event -> cancelInProgressWire());
+        menu.show(railPane, screenX, screenY);
+    }
+
+    private ContextMenu ensureDeleteMenu() {
+        if (deleteMenu != null) return deleteMenu;
+        deleteMenu = new ContextMenu();
+        deleteMenuItem = new MenuItem("Zmazať");
+        deleteMenu.getItems().add(deleteMenuItem);
+        return deleteMenu;
     }
 
     /**
@@ -477,8 +480,9 @@ public class ControlBus extends BusSymbol {
         int cell = getSheet().getGrid().getSizeMin();
         int clamped = clamp(newRows, Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         rows = clamped;
-        line.setHeight(clamped * cell);
+        line.setHeight(clamped * cell - cell);
         resizeHandle.setCenterY(clamped * cell);
+        refreshSelectionShape();
     }
 
     /**
@@ -535,16 +539,13 @@ public class ControlBus extends BusSymbol {
 
     @Override
     public void simulate() {
-        // simulujeme zápis na zbernicu pre vstupné signály (RY, IT)
-        boolean ry = false;
+        // simulujeme zápis na zbernicu pre vstupné signály (IT)
         boolean it = false;
         for (TapPoint tap : taps) {
             if (!INPUT_SIGNAL[tap.signal]) continue;
             if (!isHigh(tap.pin)) continue;
-            if (BIT_OF_SIGNAL[tap.signal] == 2) ry = true;
-            else if (BIT_OF_SIGNAL[tap.signal] == 3) it = true;
+            it = true;
         }
-        getBus().setRY(ry);
         getBus().setIT(it);
     }
 

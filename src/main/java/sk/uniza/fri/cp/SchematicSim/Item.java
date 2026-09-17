@@ -18,7 +18,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
  */
 public abstract class Item extends Movable {
 
-    private Shape selectionShape;
+    private Rectangle selectionShape;
 
     public Item(SchematicSheet sheet) {
         super(sheet);
@@ -73,5 +73,23 @@ public abstract class Item extends Movable {
     public void deselect() {
         super.deselect();
         this.getChildren().remove(this.selectionShape);
+    }
+
+    /**
+     * Prekreslenie čiarkovaného obdĺžnika výberu po zmene rozmerov súčiastky
+     * (napr. predĺženie zbernice). Pôvodný obdĺžnik je len snímka rozmerov z okamihu
+     * výberu, preto je ho treba pri zmene veľkosti prepočítať.
+     */
+    protected void refreshSelectionShape() {
+        if (selectionShape == null) return;
+        double offset = 1;
+        boolean removed = getChildren().remove(selectionShape);
+        if (!removed) return;
+        Bounds bounds = getBoundsInLocal();
+        selectionShape.setLayoutX(-offset);
+        selectionShape.setLayoutY(-offset);
+        selectionShape.setWidth(bounds.getWidth() + 2 * offset);
+        selectionShape.setHeight(bounds.getHeight() + 2 * offset);
+        getChildren().add(selectionShape);
     }
 }

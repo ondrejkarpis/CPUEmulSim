@@ -30,7 +30,7 @@ Riadiace signály CPU sú aktívne na **nízkej úrovni** (`0` = aktívny signá
 Zbernice v schéme:
 - **Adresná** (`AddressBus16`, vývody `AB0..AB15`) — hrubá zvislá čiara; ľavým kliknutím na čiaru sa otvorí menu výberu vývodu, natiahnutie vodiča na čiaru otvorí to isté menu, dĺžku čiary meníš potiahnutím spodného konca, z jedného signálu môžeš vyviesť viac rovnakých vývodov.
 - **Dátová** — `D7..D0`.
-- **Riadiace signály** — `MW_`, `MR_`, `IW_`, `IR_`, `IA_`, `RY`, `IT`.
+- **Riadiace signály** — `MW_`, `MR_`, `IW_`, `IR_`, `IA_`, `IT`.
 
 Príklad I/O programu (odčítanie prepínačov a zobrazenie na LED):
 
