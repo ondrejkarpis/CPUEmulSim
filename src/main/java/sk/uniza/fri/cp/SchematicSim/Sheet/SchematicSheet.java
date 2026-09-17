@@ -14,6 +14,9 @@ import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseDragEvent;
 import javafx.scene.input.MouseEvent;
@@ -25,6 +28,7 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
+import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
@@ -33,7 +37,9 @@ import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Plocha simulátora - schematický editor. Nahrádza {@code Board} z BreadboardSim.
@@ -61,6 +67,16 @@ public class SchematicSheet extends ScrollPane {
 
     private final ArrayList<Selectable> selected;
     private GateSymbol addingItem;
+
+    /** Schránka pre kopírovanie/prilepenie vybratých súčiastok a vodičov (Ctrl+C / Ctrl+V). */
+    private List<CopiedGate> clipboardGates = new ArrayList<>();
+    private List<CopiedWire> clipboardWires = new ArrayList<>();
+    private int clipboardBaseX;
+    private int clipboardBaseY;
+
+    /** Posledná poloha myši v scénových súradniciach - kotva pre prilepenie (Ctrl+V). */
+    private double lastMouseSceneX = -1;
+    private double lastMouseSceneY = -1;
 
     private boolean hasChanged = false;
 
@@ -226,6 +242,23 @@ public class SchematicSheet extends ScrollPane {
         });
 
         setupWireToWireHandler();
+
+        // kotva pre prilepenie (Ctrl+V) = posledná poloha myši na ploche
+        scrollContent.setOnMouseMoved(event -> {
+            lastMouseSceneX = event.getSceneX();
+            lastMouseSceneY = event.getSceneY();
+        });
+
+        // Ctrl+C kopíruje a Ctrl+V vkladá vybraté súčiastky (okno schémy nemá textové polia,
+        // takže skratky nijako nekolidujú s úpravou textu)
+        this.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                newScene.getAccelerators().put(
+                        new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN), this::copySelection);
+                newScene.getAccelerators().put(
+                        new KeyCodeCombination(KeyCode.V, KeyCombination.CONTROL_DOWN), this::pasteClipboard);
+            }
+        });
 
         this.debugWires.addListener((obs, oldValue, newValue) -> {
             for (Wire wire : layersManager.getWires()) wire.setDebugColored(newValue);
@@ -463,6 +496,150 @@ public class SchematicSheet extends ScrollPane {
         new ArrayList<>(selected).forEach(Selectable::delete);
     }
 
+    public List<GateSymbol> getSelectedGates() {
+        List<GateSymbol> result = new ArrayList<>();
+        for (Selectable selectable : selected) {
+            if (selectable instanceof GateSymbol) result.add((GateSymbol) selectable);
+        }
+        return result;
+    }
+
+    /**
+     * Kopírovanie vybratých súčiastok a vodičov do schránky (Ctrl+C). Ukladá sa snímok typu,
+     * vlastností a vzájomných gridových offsetov súčiastok - prilepenie (Ctrl+V) ich vloží
+     * rovnako rozložené, len posunuté na miesto pod kurzorom. Kopírujú sa LEN označené
+     * vodiče, a to iba tie, ktorých obidva konce sú na kopírovaných súčiastkach.
+     */
+    public void copySelection() {
+        if (!isEditingEnabled()) return;
+        List<GateSymbol> gates = getSelectedGates();
+        List<Wire> wires = new ArrayList<>();
+        for (Selectable selectable : selected) {
+            if (selectable instanceof Wire) wires.add((Wire) selectable);
+        }
+        if (gates.isEmpty() && wires.isEmpty()) return;
+
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        for (GateSymbol gate : gates) {
+            minX = Math.min(minX, gate.getGridPosX());
+            minY = Math.min(minY, gate.getGridPosY());
+        }
+        clipboardBaseX = minX;
+        clipboardBaseY = minY;
+
+        clipboardGates = new ArrayList<>();
+        for (GateSymbol gate : gates) {
+            clipboardGates.add(new CopiedGate(gate, gate.saveProperties(),
+                    gate.getGridPosX() - minX, gate.getGridPosY() - minY));
+        }
+
+        clipboardWires = new ArrayList<>();
+        for (Wire wire : wires) {
+            Pin startPin = wire.getEnds()[0].getPin();
+            Pin endPin = wire.getEnds()[1].getPin();
+            if (startPin == null || endPin == null) continue;
+            if (!isCopiedGate(startPin.getOwner()) || !isCopiedGate(endPin.getOwner())) continue;
+
+            List<Point2D> joints = new ArrayList<>();
+            for (Joint joint : wire.getJoints()) {
+                joints.add(new Point2D(joint.getLayoutX(), joint.getLayoutY()));
+            }
+            clipboardWires.add(new CopiedWire(wire, wire.getColor(), joints));
+        }
+    }
+
+    private boolean isCopiedGate(GateSymbol gate) {
+        for (CopiedGate copied : clipboardGates) {
+            if (copied.source == gate) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Prilepenie súčiastok zo schránky (Ctrl+V) na poslednú pozíciu myši na mriežke.
+     * Nové súčiastky sa po prilepení označia (výber sa presunie na ne), vodiče sa
+     * pripoja na zodpovedajúce piny klonov.
+     */
+    public void pasteClipboard() {
+        if (!isEditingEnabled()) return;
+        if (clipboardGates.isEmpty() && clipboardWires.isEmpty()) return;
+
+        Point2D mouseOnGrid = lastMouseToGrid();
+        int targetX = (int) Math.round(mouseOnGrid.getX());
+        int targetY = (int) Math.round(mouseOnGrid.getY());
+
+        Map<GateSymbol, GateSymbol> cloneBySource = new HashMap<>();
+        clearSelect();
+        for (CopiedGate copied : clipboardGates) {
+            int gridX = targetX + copied.relX;
+            int gridY = targetY + copied.relY;
+
+            GateSymbol clone;
+            try {
+                clone = copied.type.getConstructor(SchematicSheet.class).newInstance(this);
+            } catch (InstantiationException | IllegalAccessException
+                    | InvocationTargetException | NoSuchMethodException e) {
+                e.printStackTrace();
+                continue;
+            }
+
+            // ak je miesto obsadené, pokúsime sa posunúť kópiu diagonálne dolu-doprava
+            int attempts = 0;
+            while (!occupancy.isFree(gridX, gridY, clone.getGridWidth(), clone.getGridHeight())
+                    && attempts < 100) {
+                gridX++;
+                gridY++;
+                attempts++;
+            }
+
+            addItem(clone);
+            clone.moveTo(gridX, gridY);
+            clone.loadProperties(copied.properties);
+            occupancy.occupy(clone);
+            addSelect(clone);
+            cloneBySource.put(copied.source, clone);
+        }
+
+        double deltaPx = (targetX - clipboardBaseX) * gridSystem.getSizeX();
+        double deltaPy = (targetY - clipboardBaseY) * gridSystem.getSizeY();
+
+        for (CopiedWire copied : clipboardWires) {
+            Pin startPin = clonePin(copied.source.getEnds()[0].getPin(), cloneBySource);
+            Pin endPin = clonePin(copied.source.getEnds()[1].getPin(), cloneBySource);
+            if (startPin == null || endPin == null) continue;
+
+            Wire wire = new Wire(this);
+            addItem(wire);
+            wire.changeColor(copied.color);
+            wire.getEnds()[0].connect(startPin);
+            wire.getEnds()[1].connect(endPin);
+            for (Point2D joint : copied.joints) {
+                wire.splitLastSegment().moveTo(joint.getX() + deltaPx, joint.getY() + deltaPy);
+            }
+        }
+    }
+
+    /** Pin s rovnakým indexom na klone súčiastky (null, ak pôvodný pin nemá klon). */
+    private Pin clonePin(Pin sourcePin, Map<GateSymbol, GateSymbol> cloneBySource) {
+        if (sourcePin == null) return null;
+        GateSymbol clone = cloneBySource.get(sourcePin.getOwner());
+        if (clone == null) return null;
+        int index = sourcePin.getOwner().getPins().indexOf(sourcePin);
+        if (index < 0 || index >= clone.getPins().size()) return null;
+        return clone.getPins().get(index);
+    }
+
+    /** Súradnice poslednej polohy myši prepočítané na mriežku (pri neznámej polohe 2,2). */
+    private Point2D lastMouseToGrid() {
+        if (lastMouseSceneX < 0 || lastMouseSceneY < 0) {
+            return new Point2D(2, 2);
+        }
+        Point2D local = layersManager.getLayer("background")
+                .sceneToLocal(lastMouseSceneX, lastMouseSceneY);
+        return gridSystem.pixelToGrid(local.getX(), local.getY());
+    }
+
     public boolean addItem(Object item) {
         hasChanged = true;
         if (item instanceof Wire) {
@@ -553,5 +730,42 @@ public class SchematicSheet extends ScrollPane {
     public Point2D getMousePositionOnGrid(MouseEvent event) {
         Point2D local = layersManager.getLayer("background").sceneToLocal(event.getSceneX(), event.getSceneY());
         return gridSystem.pixelToGrid(local.getX(), local.getY());
+    }
+
+    /**
+     * Snímka jednej kopírovanej súčiastky - referencie na originál (pre mapovanie pinov
+     * vodičov), vlastnosti (pre obnovu cez loadProperties) a gridový offset voči ľavému
+     * hornému rohu celej skupiny vybraných súčiastok.
+     */
+    private static final class CopiedGate {
+        final GateSymbol source;
+        final Class<? extends GateSymbol> type;
+        final Map<String, String> properties;
+        final int relX;
+        final int relY;
+
+        CopiedGate(GateSymbol source, Map<String, String> properties, int relX, int relY) {
+            this.source = source;
+            this.type = source.getClass();
+            this.properties = properties;
+            this.relX = relX;
+            this.relY = relY;
+        }
+    }
+
+    /**
+     * Snímka jedného kopírovaného vodiča - referencie na originál, farba a pozície
+     * zlomov (v súradniciach plochy, offsetované pri prilepení rovnakým posunom ako súčiastky).
+     */
+    private static final class CopiedWire {
+        final Wire source;
+        final Color color;
+        final List<Point2D> joints;
+
+        CopiedWire(Wire source, Color color, List<Point2D> joints) {
+            this.source = source;
+            this.color = color;
+            this.joints = joints;
+        }
     }
 }
