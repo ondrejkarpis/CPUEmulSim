@@ -23,6 +23,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
@@ -73,6 +74,11 @@ public class SchematicSheet extends ScrollPane {
     private List<CopiedWire> clipboardWires = new ArrayList<>();
     private int clipboardBaseX;
     private int clipboardBaseY;
+
+    /** Prebiehajúce označovanie obdĺžnikom (Shift + ťah ľavým tlačidlom) - kotva v súradniciach plochy. */
+    private Rectangle rubberBand;
+    private double rubberStartX;
+    private double rubberStartY;
 
     /** Posledná poloha myši v scénových súradniciach - kotva pre prilepenie (Ctrl+V). */
     private double lastMouseSceneX = -1;
@@ -158,7 +164,53 @@ public class SchematicSheet extends ScrollPane {
         // POZOR: narozdiel od Board tu nevzniká žiadna počiatočná SchoolBreadboard - plocha je prázdna
 
         gridBackground.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
-            if (event.getButton() == MouseButton.PRIMARY) clearSelect();
+            if (event.getButton() == MouseButton.PRIMARY && !event.isShiftDown()) clearSelect();
+        });
+
+        // označovanie súčiastok a vodičov obdĺžnikom: Shift + stlačenie ľavého tlačidla na
+        // voľnej ploche spustí tah, pri ťahu sa kreslí čiarkovaný obdĺžnik a po pustení sa
+        // všetky objekty pretínajúce obdĺžnik pridajú k výberu (udržiava sa doterajší výber)
+        gridBackground.addEventHandler(MouseEvent.MOUSE_PRESSED, event -> {
+            if (event.getButton() != MouseButton.PRIMARY || !event.isShiftDown()) return;
+            if (!isEditingEnabled()) return;
+            Point2D local = gridBackground.sceneToLocal(event.getSceneX(), event.getSceneY());
+            rubberStartX = local.getX();
+            rubberStartY = local.getY();
+            rubberBand = new Rectangle(0, 0, 0, 0);
+            rubberBand.setFill(null);
+            rubberBand.setStroke(Color.BLACK);
+            rubberBand.getStrokeDashArray().addAll(4.0, 4.0);
+            rubberBand.setStrokeWidth(1.5);
+            rubberBand.setMouseTransparent(true);
+            gridBackground.getChildren().add(rubberBand);
+            event.consume();
+        });
+
+        gridBackground.addEventHandler(MouseEvent.MOUSE_DRAGGED, event -> {
+            if (rubberBand == null) return;
+            Point2D local = gridBackground.sceneToLocal(event.getSceneX(), event.getSceneY());
+            rubberBand.setLayoutX(Math.min(rubberStartX, local.getX()));
+            rubberBand.setLayoutY(Math.min(rubberStartY, local.getY()));
+            rubberBand.setWidth(Math.abs(local.getX() - rubberStartX));
+            rubberBand.setHeight(Math.abs(local.getY() - rubberStartY));
+            event.consume();
+        });
+
+        gridBackground.addEventHandler(MouseEvent.MOUSE_RELEASED, event -> {
+            if (rubberBand == null) return;
+            Rectangle band = rubberBand;
+            rubberBand = null;
+            gridBackground.getChildren().remove(band);
+            if (event.getButton() != MouseButton.PRIMARY || !event.isShiftDown()) return;
+
+            Bounds bandBounds = band.getBoundsInParent();
+            for (GateSymbol gate : layersManager.getGates()) {
+                if (gate.getBoundsInParent().intersects(bandBounds)) addSelect(gate);
+            }
+            for (Wire wire : layersManager.getWires()) {
+                if (wire.getBoundsInParent().intersects(bandBounds)) addSelect(wire);
+            }
+            event.consume();
         });
 
         this.addEventHandler(MouseDragEvent.MOUSE_DRAG_ENTERED, onMouseDragEnteredHandle);
