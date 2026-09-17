@@ -2,6 +2,7 @@ package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.geometry.Bounds;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
@@ -17,6 +18,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.Shape;
+import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
@@ -29,14 +31,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 7-segmentový displej. Má 9 vstupov - A až G (segmenty), H (desatinná bodka) a
+ * 7-segmentový displej. Má 9 vstupov - A až G (segmenty), DP (desatinná bodka) a
  * CA (spoločná anóda), všetky na ľavej strane tela. Všetky vstupy sú aktívne v 0:
  * segment svieti, keď je na jeho vstupe logická 0 a zároveň je na CA logická 0
  * (CA = master spínanie displeja). Displej je čisto pasívny - nemá výstupy a
  * nikdy nehynie na zbernicu.
  * <p>
  * Priradenie segmentov: A = horný, B = pravý horný, C = pravý dolný, D = dolný,
- * E = ľavý dolný, F = ľavý horný, G = stredný, H = desatinná bodka.
+ * E = ľavý dolný, F = ľavý horný, G = stredný, DP = desatinná bodka.
  * <p>
  * Pravým tlačidlom myši sa otvorí kontextové menu s výberom farby svietiacich segmentov.
  *
@@ -60,7 +62,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         DISPLAY_COLORS.put("Oranžová", Color.ORANGE);
     }
 
-    private static final String[] PIN_NAMES = {"A", "B", "C", "D", "E", "F", "G", "H", "CA"};
+    private static final String[] PIN_NAMES = {"A", "B", "C", "D", "E", "F", "G", "DP", "CA"};
 
     // pozor: toto sa nesmie inicializovať inline - createPins()/drawBody() volá už
     // konštruktor GateSymbol, ešte pred spustením inicializátorov inštančných premenných
@@ -158,7 +160,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         segmentPins = new ArrayList<>(SEGMENT_COUNT);
         List<Pin> pins = new ArrayList<>(PIN_NAMES.length);
         for (int i = 0; i < PIN_NAMES.length; i++) {
-            // segmenty A-H majú index 0..7, CA je posledný (index 8)
+            // segmenty A-G a DP majú index 0..7, CA je posledný (index 8)
             InputPin pin = new InputPin(this, PIN_NAMES[i], 0, 1 + i, Side.LEFT);
             pins.add(pin);
             if (i < SEGMENT_COUNT) {
@@ -202,7 +204,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         segmentShapes[4] = verticalBar(vx1, lowerTop, lowerBottom, thickness);   // E - ľavý dolný
         segmentShapes[5] = verticalBar(vx1, upperTop, upperBottom, thickness);   // F - ľavý horný
         segmentShapes[6] = horizontalBar(hx1, hx2, gy, thickness);      // G - stredný
-        segmentShapes[7] = new Circle(4.35 * c + shift, dy, 0.28 * c);          // H - desatinná bodka (v úrovni D)
+        segmentShapes[7] = new Circle(4.35 * c + shift, dy, 0.28 * c);          // DP - desatinná bodka (v úrovni D)
 
         for (Shape segment : segmentShapes) {
             segment.setFill(SEGMENT_OFF);
@@ -213,6 +215,21 @@ public class SevenSegmentDisplay extends GateSymbol {
         Pane pane = new Pane();
         pane.getChildren().add(frame);
         pane.getChildren().addAll(segmentShapes);
+
+        // názvy vývodov vpravo od pripojovacích bodov, vnútri rámika (piny sú v gride x=0,
+        // riadky y=1..9, takže každý riadok zodpovedá jednému vstupu); text je vertikálne
+        // vycentrovaný presne na stred čierneho bodu daného pinu
+        Font pinFont = Font.font(cell * 0.55);
+        double labelX = cell * 0.53;
+        for (int i = 0; i < PIN_NAMES.length; i++) {
+            Text pinLabel = new Text(PIN_NAMES[i]);
+            pinLabel.setFont(pinFont);
+            pinLabel.setFill(Color.BLACK);
+            Bounds b = pinLabel.getBoundsInLocal();
+            pinLabel.setLayoutX(labelX - (b.getMinX() + b.getWidth() / 2.0));
+            pinLabel.setLayoutY((1 + i) * cell + cell / 2.0 - (b.getMinY() + b.getHeight() / 2.0) - cell * 0.5);
+            pane.getChildren().add(pinLabel);
+        }
         return pane;
     }
 
@@ -330,7 +347,7 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "7-segmentový displej - vstupy A-H (H = desatinná bodka) a CA (spoločná anóda), "
+        return "7-segmentový displej - vstupy A-G, DP (desatinná bodka) a CA (spoločná anóda), "
                 + "segment svieti pri logickej 0 na vstupe aj na CA";
     }
 }
