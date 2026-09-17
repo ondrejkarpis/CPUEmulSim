@@ -10,6 +10,7 @@ import javafx.event.Event;
 import javafx.event.EventHandler;
 import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
+import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.ScrollPane;
@@ -150,14 +151,27 @@ public class SchematicSheet extends ScrollPane {
 
         // ZOOM/PAN
         this.setPannable(false);
+        //scrollbar-y sa skryjú: ScrollPane dostáva obsah presne vo veľkosti viewportu, takže
+        //skin nemá čo scrollovať ani centrovať - celý posun schémy (pan aj zoom kotva) vedie
+        //výhradne cez zoomPane.translateX/Y, ktoré skin nikdy neprepisuje.
+        this.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        this.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
 
         final Group contentGroup = this.layersManager.getLayers();
         final StackPane zoomPane = new StackPane(contentGroup);
-        final Group scrollContent = new Group(zoomPane);
+        //TOP_LEFT - StackPane by default CENTROVAL obsah a centrovacia odchýlka sa so zmenou
+        //stupnice menila (polovica zmeny rozmeru obsahu), čo pri vyššom priblížení posúvalo
+        //schému doprava dole. Kotva obsahu je teraz pevne v (0,0) zoomPane.
+        zoomPane.setAlignment(Pos.TOP_LEFT);
+        final Pane scrollContent = new Pane(zoomPane);
         this.setContent(scrollContent);
 
-        this.viewportBoundsProperty().addListener((ChangeListener<Bounds>) (obs, oldV, newV) ->
-                zoomPane.setMinSize(newV.getWidth(), newV.getHeight()));
+        this.viewportBoundsProperty().addListener((ChangeListener<Bounds>) (obs, oldV, newV) -> {
+            scrollContent.setMinSize(newV.getWidth(), newV.getHeight());
+            scrollContent.setPrefSize(newV.getWidth(), newV.getHeight());
+            scrollContent.setMaxSize(newV.getWidth(), newV.getHeight());
+            zoomPane.setMinSize(newV.getWidth(), newV.getHeight());
+        });
 
         zoomPane.setOnScroll(event -> {
             event.consume();
@@ -167,46 +181,31 @@ public class SchematicSheet extends ScrollPane {
             double newScale = scaleTotal.doubleValue() * scaleFactor;
             if (newScale < 0.3 || newScale > 3) return;
 
-            //kotva zoomu = bod plochy pod kurzorom (v súradniciach mriežky)
-            Point2D anchor = contentGroup.sceneToLocal(event.getSceneX(), event.getSceneY());
-
-            //kotva v px viewportu (scénové súradnice, nezávislé od obsahu);
-            //horší ľavý roh ScrollPane (0,0) je statický - na rozdiel od viewportBounds,
-            //ktoré sa posúvajú so scrollom
-            Point2D controlOrigin = this.localToScene(0, 0);
-            double anchorX = event.getSceneX() - controlOrigin.getX();
-            double anchorY = event.getSceneY() - controlOrigin.getY();
+            //kotva zoomu = bod plochy pod kurzorom (v súradniciach mriežky, pri starej stupnici)
+            double mouseSceneX = event.getSceneX();
+            double mouseSceneY = event.getSceneY();
+            Point2D anchor = contentGroup.sceneToLocal(mouseSceneX, mouseSceneY);
 
             contentGroup.setScaleX(newScale);
             contentGroup.setScaleY(newScale);
             scaleTotal.setValue(newScale);
 
-            //scroll upravíme oneskorene (až po najbližšom layout cykle) - skin ScrollPane si
-            //nový rozsah scrollbaru prepočíta až vtedy; zapísaný skôr by bol oklieštený
-            //na starý rozsah a bod plochy pod kurzorom by sa posunul
-            Platform.runLater(() -> Platform.runLater(() -> {
+            //posun oneskorene (až po najbližšom layout cykle, keď majú scénové transformácie
+            //aktuálne rozmery). Kotva sa meria priamo zo scénovej polohy bodu mriežky
+            //(contentGroup.localToScene) a presunie sa cez zoomPane.translateX/Y: meraný posun je
+            //z definície presný, skin ho nikdy neprepisuje a nezávisí od rozsahu scrollbaru ani
+            //od žiadneho centrovania - bod pod kurzorom zostáva fixný pri VŠETKÝCH úrovniach.
+            Platform.runLater(() -> {
                 scrollContent.applyCss();
                 scrollContent.layout();
 
-                double extraW = scrollContent.getLayoutBounds().getWidth() - this.getViewportBounds().getWidth();
-                double extraH = scrollContent.getLayoutBounds().getHeight() - this.getViewportBounds().getHeight();
-
-                //požadovaný posun: bod plochy pod kurzorom po priblížení musí zostať na anchorX;
-                //anchor je v (neskalovaných) súradniciach mriežky, preto ho násobíme NOVOU
-                //stupnicou newScale (nie koeficientom scaleFactor - ten platí len od stupnice 1)
-                if (extraW > 0) {
-                    double rangeW = this.getHmax() - this.getHmin();
-                    double targetW = anchor.getX() * newScale - anchorX;
-                    double ratioW = Math.max(0, Math.min(targetW / extraW, 1));
-                    this.setHvalue(this.getHmin() + ratioW * rangeW);
-                }
-                if (extraH > 0) {
-                    double rangeH = this.getVmax() - this.getVmin();
-                    double targetH = anchor.getY() * newScale - anchorY;
-                    double ratioH = Math.max(0, Math.min(targetH / extraH, 1));
-                    this.setVvalue(this.getVmin() + ratioH * rangeH);
-                }
-            }));
+                Point2D anchorNow = contentGroup.localToScene(anchor);
+                //kotva sa presunie o nameranú odchýlku (raw delta - žiadny clamp: korekcia len
+                //vráti bod pod kurzorom na jeho pôvodnú scénovú polohu a zostáva v rozsahu,
+                //ktorý skin sám zmestil do viewportu)
+                zoomPane.setTranslateX(zoomPane.getTranslateX() + (mouseSceneX - anchorNow.getX()));
+                zoomPane.setTranslateY(zoomPane.getTranslateY() + (mouseSceneY - anchorNow.getY()));
+            });
         });
 
         final javafx.beans.property.ObjectProperty<Point2D> lastMouseCoordinates = new javafx.beans.property.SimpleObjectProperty<>();
@@ -214,14 +213,13 @@ public class SchematicSheet extends ScrollPane {
 
         scrollContent.setOnMouseDragged(event -> {
             double deltaX = event.getX() - lastMouseCoordinates.get().getX();
-            double extraWidth = scrollContent.getLayoutBounds().getWidth() - this.getViewportBounds().getWidth();
-            double deltaH = deltaX * (this.getHmax() - this.getHmin()) / extraWidth;
-            this.setHvalue(Math.max(0, Math.min(this.getHmax(), this.getHvalue() - deltaH)));
-
             double deltaY = event.getY() - lastMouseCoordinates.get().getY();
-            double extraHeight = scrollContent.getLayoutBounds().getHeight() - this.getViewportBounds().getHeight();
-            double deltaV = deltaY * (this.getHmax() - this.getHmin()) / extraHeight;
-            this.setVvalue(Math.max(0, Math.min(this.getVmax(), this.getVvalue() - deltaV)));
+            double contentW = contentGroup.getLayoutBounds().getWidth() * scaleTotal.doubleValue();
+            double contentH = contentGroup.getLayoutBounds().getHeight() * scaleTotal.doubleValue();
+            zoomPane.setTranslateX(clampPan(zoomPane.getTranslateX() + deltaX,
+                    this.getViewportBounds().getWidth() - contentW));
+            zoomPane.setTranslateY(clampPan(zoomPane.getTranslateY() + deltaY,
+                    this.getViewportBounds().getHeight() - contentH));
         });
 
         setupWireToWireHandler();
@@ -342,6 +340,16 @@ public class SchematicSheet extends ScrollPane {
 
     private WireJunction findJunctionNear(Wire wire, double x, double y) {
         return wire.findJunctionNear(x, y);
+    }
+
+    /**
+     * Klamperi panovacieho posunu (zoomPane.translateX/Y): obsah sa smie posúvať len v rozsahu
+     * {@code [min, 0]}. Ak je obsah užší ako viewport ({@code min >= 0}), ostáva zarovnaný vľavo
+     * hore (0).
+     */
+    private static double clampPan(double value, double min) {
+        if (min >= 0) return 0;
+        return Math.max(min, Math.min(0, value));
     }
 
     public double getAppliedScale() {
