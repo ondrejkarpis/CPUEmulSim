@@ -27,8 +27,12 @@ public abstract class HighlightGroup extends Group implements Selectable {
 
             if (sheet != null) {
                 if (event.isShiftDown()) {
-                    sheet.addSelect(this);
-                } else {
+                    if (isSelected) {
+                        sheet.removeSelect(this);
+                    } else {
+                        sheet.addSelect(this);
+                    }
+                } else if (!isSelected) {
                     sheet.clearSelect();
                     sheet.addSelect(this);
                 }

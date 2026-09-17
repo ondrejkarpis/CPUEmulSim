@@ -5,6 +5,7 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
 import javafx.scene.input.MouseEvent;
+import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 
@@ -24,11 +25,17 @@ public abstract class Movable extends HighlightGroup {
     private double nodeOffsetX = -1;
     private double nodeOffsetY = -1;
 
+    /** Pre viacnásobný pohyb: posledná pozícia ťahaného objektu - delta sa aplikuje na všetky vybraté. */
+    private int dragLastGridX;
+    private int dragLastGridY;
+
     private final EventHandler<MouseEvent> onMousePressedEventHandler = event -> {
         if (!event.isPrimaryButtonDown()) return;
         if (sheet != null && !sheet.isEditingEnabled()) return;
         nodeOffsetX = event.getSceneX() - getLayoutX() * sheet.getAppliedScale();
         nodeOffsetY = event.getSceneY() - getLayoutY() * sheet.getAppliedScale();
+        dragLastGridX = gridPosX;
+        dragLastGridY = gridPosY;
         event.consume();
     };
 
@@ -68,10 +75,20 @@ public abstract class Movable extends HighlightGroup {
             else if (gridY * grid.getSizeY() + getBoundsInParent().getHeight() > sheet.getHeightPx())
                 gridY = (int) (Math.round(sheet.getHeightPx() - getBoundsInParent().getHeight()) / grid.getSizeY());
 
+            if (this instanceof GateSymbol && isSelected()) {
+                int changeX = gridX - dragLastGridX;
+                int changeY = gridY - dragLastGridY;
+                for (GateSymbol other : sheet.getSelectedGates()) {
+                    if (other != this) other.moveBy(changeX, changeY);
+                }
+            }
+
             moveTo(gridX, gridY);
 
             gridPosX = gridX;
             gridPosY = gridY;
+            dragLastGridX = gridX;
+            dragLastGridY = gridY;
         }
 
         event.consume();
