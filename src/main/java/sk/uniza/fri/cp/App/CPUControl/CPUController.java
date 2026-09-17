@@ -1368,9 +1368,6 @@ public class CPUController implements Initializable {
         btnStop.setDisable(true);
         btnReset.setDisable(false);
 
-        // po skončení vykonávania programu vypneme schému
-        if (schematicSheet != null) schematicSheet.powerOff();
-
         codeEditor.setEditable(true);
 
         updateGUI();
