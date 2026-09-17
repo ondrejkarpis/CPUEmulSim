@@ -38,7 +38,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
 import sk.uniza.fri.cp.SchematicSim.Gates.MatrixKeyboard;
 import sk.uniza.fri.cp.SchematicSim.Gates.Register8;
-import sk.uniza.fri.cp.SchematicSim.Gates.Switch;
+import sk.uniza.fri.cp.SchematicSim.Gates.Input;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -157,7 +157,7 @@ public class SchematicController {
         picker.registerItem(new ControlBus());
 
         //zariadenia komunikujúce so zbernicou CPU
-        picker.registerItem(new Switch());
+        picker.registerItem(new Input());
         picker.registerItem(new Led());
         picker.registerItem(new PushButton());
         picker.registerItem(new MatrixKeyboard());

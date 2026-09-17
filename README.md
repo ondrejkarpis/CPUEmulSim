@@ -25,7 +25,7 @@ Riadiace signály CPU sú aktívne na **nízkej úrovni** (`0` = aktívny signá
 |-----------|------|------------|
 | `Ram8k`   | `D7..D0`, `WE_`, `OE_`, `E1_`, `E2` (vľavo), `A12..A0` (vpravo) | čítanie pri `OE_=0`, zápis pri `WE_=0`, čip aktívny keď `E1_=0` a `E2=1`; adresa z `A12..A0`, dáta na `D7..D0` |
 | `Led`     | `IN` (štandardne vľavo) | svieti pri logickej 1; pravým tlačidlom vyber umiestnenie vývodu (vpravo/vľavo/hore/dole) a farbu LED (červená/zelená/modrá/žltá/oranžová) |
-| `Switch`  | `O` (štandardne vpravo) | klikom prepni; logická hodnota (1/0) sa zobrazuje vnútri kruhu; pravým tlačidlom vyber umiestnenie vývodu (vpravo/vľavo/hore/dole) |
+| `Input`  | `O` (štandardne vpravo) | klikom prepni; logická hodnota (1/0) sa zobrazuje vnútri štvorca; pravým tlačidlom vyber umiestnenie vývodu (vpravo/vľavo/hore/dole) |
 
 Zbernice v schéme:
 - **Adresná** (`AddressBus16`, vývody `AB0..AB15`) — hrubá zvislá čiara; ľavým kliknutím na čiaru sa otvorí menu výberu vývodu, natiahnutie vodiča na čiaru otvorí to isté menu, dĺžku čiary meníš potiahnutím spodného konca, z jedného signálu môžeš vyviesť viac rovnakých vývodov.

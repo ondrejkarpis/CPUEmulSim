@@ -10,7 +10,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
@@ -24,28 +24,28 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Samostatný prepínač - biely kruh s jedným prípojným bodom {@code O}. Kliknutím na kruh
- * sa stav prepne a vnútri kruhu sa zobrazí logická hodnota vývodu (1 = HIGH, 0 = LOW).
+ * Samostatný prepínač - biely štvorček s jedným prípojným bodom {@code O}. Kliknutím
+ * na štvorček sa stav prepne a vnútri sa zobrazí logická hodnota vývodu (1 = HIGH, 0 = LOW).
  * Pravým tlačidlom myši sa otvorí kontextové menu na výber umiestnenia vývodu
  * (vpravo/vľavo/hore/dole); štandardne je vývod vpravo. Vývod {@code O} trvalo generuje
  * HIGH pre zapnutý prepínač a LOW pre vypnutý.
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
-public class Switch extends GateSymbol {
+public class Input extends GateSymbol {
 
     private static final int GRID_WIDTH = 2;
     private static final int GRID_HEIGHT = 2;
 
     private Pin outPin;
-    private Circle button;
+    private Rectangle button;
     private Text valueText;
     private ContextMenu contextMenu;
 
     private volatile boolean on = false;
 
     /** Konštruktor pre paletku (ItemPicker). */
-    public Switch() {
+    public Input() {
         super();
     }
 
@@ -54,7 +54,7 @@ public class Switch extends GateSymbol {
         Text label = new Text(getName());
         label.setLayoutY(label.getBoundsInLocal().getHeight());
 
-        Image image = new Image(getClass().getResourceAsStream("/icons/switch.png"));
+        Image image = new Image(getClass().getResourceAsStream("/icons/input.png"));
         ImageView view = new ImageView(image);
         view.setLayoutY(label.getBoundsInLocal().getHeight() + 5);
 
@@ -66,7 +66,7 @@ public class Switch extends GateSymbol {
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */
-    public Switch(SchematicSheet sheet) {
+    public Input(SchematicSheet sheet) {
         super(sheet);
     }
 
@@ -82,7 +82,9 @@ public class Switch extends GateSymbol {
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
-        button = new Circle(w / 2.0, h / 2.0, cell * 0.55, Color.WHITE);
+        double size = cell * 0.9;
+        button = new Rectangle(w / 2.0 - size / 2.0, h / 2.0 - size / 2.0, size, size);
+        button.setFill(Color.WHITE);
         button.setStroke(Color.BLACK);
         button.setStrokeWidth(1.5);
         button.setOnMouseClicked(event -> {
@@ -257,7 +259,7 @@ public class Switch extends GateSymbol {
 
     @Override
     public String getName() {
-        return "SW";
+        return "INP";
     }
 
     @Override
