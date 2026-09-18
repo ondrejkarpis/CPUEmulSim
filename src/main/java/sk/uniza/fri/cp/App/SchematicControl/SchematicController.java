@@ -98,7 +98,7 @@ public class SchematicController {
 
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
-        editableArea.setDividerPositions(0.22);
+        editableArea.setDividerPositions(0.12);
 
         this.root = new BorderPane();
         this.root.setTop(buildToolbar());
