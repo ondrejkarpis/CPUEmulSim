@@ -8,7 +8,10 @@ import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.ColorPicker;
+import javafx.scene.control.MenuItem;
+import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
@@ -158,6 +161,21 @@ public class Wire extends HighlightGroup {
         }
         this.setStyle("-fx-effect: none");
     };
+
+    private final ContextMenu contextMenu = new ContextMenu();
+
+    private void showWireContextMenu(MouseEvent event) {
+        if (event.getButton() == MouseButton.SECONDARY) {
+            if (!getSheet().isEditingEnabled()) {
+                contextMenu.hide();
+                return;
+            }
+            contextMenu.show(this, event.getScreenX(), event.getScreenY());
+            event.consume();
+        } else {
+            contextMenu.hide();
+        }
+    }
 
     /**
      * Vytvorenie nového vodiča začínajúceho na danom pine. Voľný koniec je dostupný cez
@@ -1244,6 +1262,35 @@ public class Wire extends HighlightGroup {
         }
     }
 
+    /**
+     * Rerouting vodiča podľa kontextového menu - zmaže všetky vnútorné ohyby a znovu
+     * vypočíta ortogonálnu trasu medzi oboma koncami. Používa sa na vyrovnanie vodiča
+     * (napr. po neprehľadnom ťahaní). Spájače (WireJunction) sa neriešia - tie nie sú
+     * súčasťou {@link #joints} v novom modeli a rerouting medzi ich koncami necháva
+     * odbočky nedotknuté.
+     */
+    public void reroute() {
+        if (getSheet() == null || !getSheet().isEditingEnabled()) return;
+        for (Joint joint : this.joints) {
+            if (joint instanceof WireJunction) return;
+        }
+
+        Point2D p0 = this.ends[0].getConnectionPoint();
+        Side side0 = this.ends[0].getExitSide();
+        Point2D p1 = this.ends[1].getConnectionPoint();
+        Side side1 = this.ends[1].getExitSide();
+
+        int grid = areBothEndsConnected() ? getSheet().getGrid().getSizeMin() : 0;
+        List<Point2D> path = OrthogonalRouter.route(p0, side0, p1, side1, null, grid);
+
+        clearGeometry();
+        addSegmentWithPath(this.ends[0], this.ends[1], path);
+
+        if (isSelected() && isSelectable()) {
+            this.highlightSegments(1);
+        }
+    }
+
     public Joint splitLastSegment() {
         return this.splitSegment(((LinkedList<WireSegment>) this.segments).getLast());
     }
@@ -1280,12 +1327,17 @@ public class Wire extends HighlightGroup {
         return newJoint;
     }
 
-    private void registerEvents() {
+private void registerEvents() {
         this.addEventHandler(MouseEvent.DRAG_DETECTED, onMouseDragDetected);
         this.addEventHandler(MouseEvent.MOUSE_DRAGGED, onMouseDragged);
         this.addEventHandler(MouseEvent.MOUSE_RELEASED, onMouseReleased);
         this.addEventHandler(MouseEvent.MOUSE_ENTERED_TARGET, onMouseEntered);
-        this.addEventHandler(MouseEvent.MOUSE_EXITED, onMouseExited);
+        this.addEventHandler(MouseEvent.MOUSE_EXITED_TARGET, onMouseExited);
+        this.addEventHandler(MouseEvent.MOUSE_PRESSED, this::showWireContextMenu);
+
+        MenuItem rerouteItem = new MenuItem("Reroute");
+        rerouteItem.setOnAction(event -> reroute());
+        this.contextMenu.getItems().setAll(rerouteItem);
     }
 
     private double firstDeltaX, firstDeltaY;
