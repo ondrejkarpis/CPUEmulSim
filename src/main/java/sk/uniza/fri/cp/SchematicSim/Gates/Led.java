@@ -37,6 +37,7 @@ public class Led extends GateSymbol {
 
     private static final int GRID_WIDTH = 2;
     private static final int GRID_HEIGHT = 2;
+    private static final long INPUT_HOLD_MS = 100L;
 
     private static final Color LED_OFF = Color.DARKGRAY;
 
@@ -54,6 +55,9 @@ public class Led extends GateSymbol {
     private ContextMenu contextMenu;
 
     private volatile boolean on = false;
+    private boolean wasHigh = false;
+    private boolean holdActive = false;
+    private long holdDeadlineMs = 0L;
     private volatile Color ledColor = LED_COLORS.get("Červená");
 
     /** Konštruktor pre paletku (ItemPicker). */
@@ -186,8 +190,42 @@ public class Led extends GateSymbol {
 
     @Override
     public void simulate() {
-        // LED svieti, keď je na vstupe logická 1
-        boolean lit = isHigh(pinIn);
+        long now = System.currentTimeMillis();
+        boolean high = isHigh(pinIn);
+        applyInputState(high, now);
+    }
+
+    private void applyInputState(boolean high, long now) {
+        if (high) {
+            wasHigh = true;
+            holdActive = false;
+            holdDeadlineMs = 0L;
+            setLitState(true);
+            return;
+        }
+
+        if (wasHigh) {
+            wasHigh = false;
+            holdActive = true;
+            holdDeadlineMs = now + INPUT_HOLD_MS;
+            setLitState(true);
+            return;
+        }
+
+        if (holdActive) {
+            if (now >= holdDeadlineMs) {
+                holdActive = false;
+                setLitState(false);
+            } else {
+                setLitState(true);
+            }
+            return;
+        }
+
+        setLitState(false);
+    }
+
+    private void setLitState(boolean lit) {
         if (lit != on) {
             on = lit;
             refreshVisual();
@@ -197,6 +235,10 @@ public class Led extends GateSymbol {
     @Override
     public void reset() {
         if (pinIn != null) setPinForce(pinIn, Pin.PinState.NOT_CONNECTED);
+        wasHigh = false;
+        holdActive = false;
+        holdDeadlineMs = 0L;
+        setLitState(false);
     }
 
     /**

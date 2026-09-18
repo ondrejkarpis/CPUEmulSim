@@ -26,6 +26,7 @@ import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,9 +50,10 @@ public class SevenSegmentDisplay extends GateSymbol {
     private static final int GRID_WIDTH = 6;
     private static final int GRID_HEIGHT = 10;
     private static final int SEGMENT_COUNT = 8;
+    private static final long CA_HOLD_MS = 100L;
 
-    private static final Color SEGMENT_OFF = Color.rgb(64, 64, 64);
-    private static final Color SEGMENT_UNPOWERED = Color.rgb(10, 10, 10);
+    private static final Color SEGMENT_OFF = Color.rgb(220, 220, 220);
+    private static final Color SEGMENT_UNPOWERED = Color.rgb(120, 120, 120);
 
     private static final Map<String, Color> DISPLAY_COLORS = new LinkedHashMap<>();
     static {
@@ -75,6 +77,10 @@ public class SevenSegmentDisplay extends GateSymbol {
     private volatile Color segmentColor = DISPLAY_COLORS.get("Červená");
 
     private boolean[] litSegments = new boolean[SEGMENT_COUNT];
+    private boolean[] holdSnapshot = new boolean[SEGMENT_COUNT];
+    private boolean caWasEnabled;
+    private boolean caHoldActive;
+    private long caHoldDeadlineMs;
     private volatile boolean powered;
 
     /** Konštruktor pre paletku (ItemPicker). */
@@ -184,7 +190,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         double cw = getGridWidth() * c;
         double ch = getGridHeight() * c;
         Rectangle frame = new Rectangle(0, 0, cw, ch);
-        frame.setFill(null);
+        frame.setFill(Color.WHITE);
         frame.setStroke(Color.BLACK);
         frame.setStrokeWidth(1.5);
 
@@ -208,8 +214,8 @@ public class SevenSegmentDisplay extends GateSymbol {
 
         for (Shape segment : segmentShapes) {
             segment.setFill(SEGMENT_OFF);
-            segment.setStroke(Color.BLACK);
-            segment.setStrokeWidth(0.75);
+            //segment.setStroke(Color.BLACK);
+            //segment.setStrokeWidth(0.75);
         }
 
         Pane pane = new Pane();
@@ -257,25 +263,65 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     @Override
     public void simulate() {
-        // všetky vstupy sú aktívne v 0: segment svieti, keď je jeho vstup logická 0
-        // a súčasne je logická 0 aj na CA (spoločná anóda = master spínanie displeja)
-        boolean enabled = isLow(caPin);
-        boolean powerChanged = enabled != powered;
-        powered = enabled;
-        boolean[] newLit = new boolean[SEGMENT_COUNT];
-        for (int i = 0; i < SEGMENT_COUNT; i++) {
-            newLit[i] = enabled && isLow(segmentPins.get(i));
+        long now = System.currentTimeMillis();
+        boolean caEnabled = isLow(caPin); // CA=LOW => displej aktivovaný
+
+        if (caEnabled) {
+            // CA vrátené do aktívneho stavu: timeout sa zruší a displej pracuje normálne.
+            caWasEnabled = true;
+            caHoldActive = false;
+            caHoldDeadlineMs = 0L;
+            powered = true;
+
+            boolean[] newLit = new boolean[SEGMENT_COUNT];
+            for (int i = 0; i < SEGMENT_COUNT; i++) {
+                newLit[i] = isLow(segmentPins.get(i));
+            }
+
+            applyLitState(newLit, true);
+            return;
         }
 
+        // CA = HIGH = neaktívne. Triggerujeme hold iba na prechode 0->1.
+        if (caWasEnabled) {
+            caWasEnabled = false;
+            caHoldActive = true;
+            caHoldDeadlineMs = now + CA_HOLD_MS;
+            holdSnapshot = Arrays.copyOf(litSegments, SEGMENT_COUNT);
+            powered = true;
+            applyLitState(holdSnapshot, true);
+            return;
+        }
+
+        if (caHoldActive) {
+            if (now >= caHoldDeadlineMs) {
+                caHoldActive = false;
+                powered = false;
+                applyLitState(new boolean[SEGMENT_COUNT], true);
+            } else {
+                powered = true;
+                applyLitState(holdSnapshot, false);
+            }
+            return;
+        }
+
+        // Po timeoute ostane displej vypnutý, kým sa CA nevráti na LOW.
+        powered = false;
+        applyLitState(new boolean[SEGMENT_COUNT], true);
+    }
+
+    private void applyLitState(boolean[] newLit, boolean powerChanged) {
         boolean changed = powerChanged;
+
         for (int i = 0; i < SEGMENT_COUNT; i++) {
-            if (newLit[i] != litSegments[i]) {
+            boolean desired = newLit[i];
+            if (litSegments[i] != desired) {
+                litSegments[i] = desired;
                 changed = true;
-                break;
             }
         }
+
         if (changed) {
-            litSegments = newLit;
             refreshVisual();
         }
     }
@@ -286,6 +332,10 @@ public class SevenSegmentDisplay extends GateSymbol {
             setPinForce(pin, Pin.PinState.NOT_CONNECTED);
         }
         litSegments = new boolean[SEGMENT_COUNT];
+        holdSnapshot = new boolean[SEGMENT_COUNT];
+        caWasEnabled = false;
+        caHoldActive = false;
+        caHoldDeadlineMs = 0L;
         powered = false;
         refreshVisual();
     }
@@ -301,8 +351,14 @@ public class SevenSegmentDisplay extends GateSymbol {
         visualUpdateScheduled = true;
         Platform.runLater(() -> {
             visualUpdateScheduled = false;
+            if (!powered) {
+                for (Shape segment : segmentShapes) {
+                    segment.setFill(SEGMENT_OFF);
+                }
+                return;
+            }
             for (int i = 0; i < SEGMENT_COUNT; i++) {
-                segmentShapes[i].setFill(litSegments[i] ? segmentColor : (powered ? SEGMENT_OFF : SEGMENT_UNPOWERED));
+                segmentShapes[i].setFill(litSegments[i] ? segmentColor : SEGMENT_OFF);
             }
         });
     }

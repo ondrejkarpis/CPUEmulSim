@@ -6,7 +6,7 @@
 
     <groupId>sk.uniza.fri.cp</groupId>
     <artifactId>CPUEmulSim</artifactId>
-    <version>0.9</version>
+    <version>0.9.1</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -49,6 +49,14 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <classifier>classes</classifier>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -59,9 +67,10 @@
             <version>0.8.2</version>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>5.0.0-M3</version>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
