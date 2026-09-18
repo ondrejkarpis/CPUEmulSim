@@ -6,7 +6,7 @@
 
     <groupId>sk.uniza.fri.cp</groupId>
     <artifactId>CPUEmulSim</artifactId>
-    <version>1.6.0</version>
+    <version>0.9</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -28,6 +28,8 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <version>3.6.0</version>
                 <configuration>
+                    <finalName>CPUEmulSim</finalName>
+                    <appendAssemblyId>false</appendAssemblyId>
                     <archive>
                         <manifest>
                             <mainClass>sk.uniza.fri.cp.App.App</mainClass>

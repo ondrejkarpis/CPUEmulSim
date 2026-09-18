@@ -15,10 +15,10 @@ public class AboutDialog extends JDialog {
 
         Box b = Box.createVerticalBox();
         b.add(Box.createGlue());
-        b.add(new JLabel("                     CPU emulator v. 1.4.3"));
-        b.add(new JLabel("                      Autor: Tomáš Hianik"));
-        b.add(new JLabel("                (bakalárska práca v r.2017)"));
-        b.add(new JLabel("                Úpravy: Ondrej Karpiš (2024)"));
+        b.add(new JLabel("        CPU emulátor a logický simulátor"));
+        b.add(new JLabel("          Pôvodný autor: Tomáš Hianik"));
+        b.add(new JLabel("          (bakalárska práca v r.2017)"));
+        b.add(new JLabel("          Úpravy: Ondrej Karpiš a AI"));
         b.add(Box.createGlue());
         getContentPane().add(b, "Center");
 

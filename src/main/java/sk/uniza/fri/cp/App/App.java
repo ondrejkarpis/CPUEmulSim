@@ -22,6 +22,9 @@ public class App extends Application {
     private static final int CPU_WINDOW_WIDTH = 1280;
     private static final int CPU_WINDOW_HEIGHT = 640;
 
+    public static final String PROGRAM_VERSION = "0.9";
+    public static final String WINDOW_TITLE = "CPU Emulator v. " + PROGRAM_VERSION;
+
     public static void main(String[] args) {
         launch();
     }
@@ -76,7 +79,7 @@ public class App extends Application {
         });
 
         primaryStage.setScene(mainScene);
-        primaryStage.setTitle("CPU Emulator");
+        primaryStage.setTitle(WINDOW_TITLE);
         primaryStage.getIcons().add(new Image(getClass().getResourceAsStream("/icons/cpu_icon.png")));
         primaryStage.show();
         primStage = primaryStage;
