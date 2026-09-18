@@ -546,6 +546,11 @@ public class SchematicSheet extends ScrollPane {
     public void deleteSelect() {
         if (!isEditingEnabled()) return;
         new ArrayList<>(selected).forEach(Selectable::delete);
+        // zmazané objekty sa odstránia aj z výberu - vrátane tých, ktoré sa zmazali ako
+        // vedľajší efekt (vodiče na pinoch mazanej súčiastky). Inak by ostali v zozname
+        // výberu, pri ďalšom označení (najmä gumičkou/Shift+) by sa skopírovali a Ctrl+V
+        // by "vzkriesil" už vymazané súčiastky.
+        selected.removeIf(item -> !(item instanceof Node) || ((Node) item).getParent() == null);
     }
 
     public List<GateSymbol> getSelectedGates() {
@@ -569,6 +574,10 @@ public class SchematicSheet extends ScrollPane {
         for (Selectable selectable : selected) {
             if (selectable instanceof Wire) wires.add((Wire) selectable);
         }
+        // schránka sa pri KAŽDOM Ctrl+C vymaže - vloží sa len to, čo sa kopíruje teraz,
+        // nie starý obsah z predchádzajúceho kopírovania
+        clipboardGates = new ArrayList<>();
+        clipboardWires = new ArrayList<>();
         if (gates.isEmpty() && wires.isEmpty()) return;
 
         int minX = Integer.MAX_VALUE;
@@ -579,8 +588,6 @@ public class SchematicSheet extends ScrollPane {
         }
         clipboardBaseX = minX;
         clipboardBaseY = minY;
-
-        clipboardGates = new ArrayList<>();
         for (GateSymbol gate : gates) {
             clipboardGates.add(new CopiedGate(gate, gate.saveProperties(),
                     gate.getGridPosX() - minX, gate.getGridPosY() - minY));
@@ -634,15 +641,6 @@ public class SchematicSheet extends ScrollPane {
                     | InvocationTargetException | NoSuchMethodException e) {
                 e.printStackTrace();
                 continue;
-            }
-
-            // ak je miesto obsadené, pokúsime sa posunúť kópiu diagonálne dolu-doprava
-            int attempts = 0;
-            while (!occupancy.isFree(gridX, gridY, clone.getGridWidth(), clone.getGridHeight())
-                    && attempts < 100) {
-                gridX++;
-                gridY++;
-                attempts++;
             }
 
             addItem(clone);

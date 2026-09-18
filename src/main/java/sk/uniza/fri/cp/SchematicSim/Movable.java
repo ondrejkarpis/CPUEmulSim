@@ -116,11 +116,13 @@ public abstract class Movable extends HighlightGroup {
         this.gridPosX += deltaX;
         this.gridPosY += deltaY;
         Point2D point = sheet.getGrid().gridToPixel(this.gridPosX, this.gridPosY);
-        this.relocate(point.getX(), point.getY());
+        this.setLayoutX(point.getX());
+        this.setLayoutY(point.getY());
     }
 
     public void moveTo(Point2D point) {
-        this.relocate(point.getX(), point.getY());
+        this.setLayoutX(point.getX());
+        this.setLayoutY(point.getY());
     }
 
     public void moveTo(double posX, double posY) {

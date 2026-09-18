@@ -1,6 +1,7 @@
 package sk.uniza.fri.cp.SchematicSim.Wire;
 
 import javafx.application.Platform;
+import javafx.collections.ListChangeListener;
 import javafx.event.Event;
 import javafx.event.EventHandler;
 import javafx.geometry.Point2D;
@@ -1420,6 +1421,8 @@ public class Wire extends HighlightGroup {
     }
 
     private final ArrayList<Shape> selectionShapes = new ArrayList<>();
+    private final List<javafx.collections.ObservableList<Double>> shadedRoutes = new ArrayList<>();
+    private final List<ListChangeListener<Double>> shadeListeners = new ArrayList<>();
 
     /**
      * Zvýraznenie celého vodiča (všetkých segmentov) čiarkovanou čiarou - používa sa pri
@@ -1438,6 +1441,15 @@ public class Wire extends HighlightGroup {
             highlight.setOpacity(opacity);
             highlight.setMouseTransparent(true);
 
+            // kopírovanie trasy zo segmentu, aby zvýraznenie držalo krok aj pri presune
+            // skupiny (inak by čiarkované zvýraznenie ostalo na starom mieste a vodič by
+            // vyzeral roztrhnutý / s odskokom)
+            javafx.collections.ObservableList<Double> route = (javafx.collections.ObservableList<Double>) segment.getRoutedPoints();
+            ListChangeListener<Double> sync = change -> highlight.getPoints().setAll(route);
+            route.addListener(sync);
+            this.shadedRoutes.add(route);
+            this.shadeListeners.add(sync);
+
             this.selectionShapes.add(highlight);
             this.getChildren().add(highlight);
         });
@@ -1446,6 +1458,11 @@ public class Wire extends HighlightGroup {
     private void unhighlightSegments() {
         this.getChildren().removeAll(this.selectionShapes);
         this.selectionShapes.clear();
+        for (int i = 0; i < shadedRoutes.size(); i++) {
+            shadedRoutes.get(i).removeListener(shadeListeners.get(i));
+        }
+        shadedRoutes.clear();
+        shadeListeners.clear();
     }
 
     @Override
