@@ -28,6 +28,7 @@ import sk.uniza.fri.cp.SchematicSim.Buses.AddressBus16;
 import sk.uniza.fri.cp.SchematicSim.Buses.ControlBus;
 import sk.uniza.fri.cp.SchematicSim.Buses.DataBus8;
 import sk.uniza.fri.cp.SchematicSim.Gates.AndGate;
+import sk.uniza.fri.cp.SchematicSim.Gates.BusBuffer;
 import sk.uniza.fri.cp.SchematicSim.Gates.Led;
 import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
@@ -171,6 +172,7 @@ public class SchematicController {
         picker.registerItem(new NandGate());
         picker.registerItem(new NorGate());
         picker.registerItem(new XorGate());
+        picker.registerItem(new BusBuffer());
 
         //ostatné zariadenia
         picker.registerItem(new Register8());
