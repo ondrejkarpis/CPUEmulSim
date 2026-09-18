@@ -30,10 +30,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 7-segmentový displej. Má 9 vstupov - A až G (segmenty), DP (desatinná bodka) a
@@ -54,7 +50,7 @@ public class SevenSegmentDisplay extends GateSymbol {
     private static final int GRID_WIDTH = 6;
     private static final int GRID_HEIGHT = 10;
     private static final int SEGMENT_COUNT = 8;
-    private static final long MIN_SEGMENT_HOLD_MS = 300L;
+    private static final long CA_HOLD_MS = 100L;
 
     private static final Color SEGMENT_OFF = Color.rgb(220, 220, 220);
     private static final Color SEGMENT_UNPOWERED = Color.rgb(120, 120, 120);
@@ -81,9 +77,10 @@ public class SevenSegmentDisplay extends GateSymbol {
     private volatile Color segmentColor = DISPLAY_COLORS.get("Červená");
 
     private boolean[] litSegments = new boolean[SEGMENT_COUNT];
-    private long[] segmentOffDeadline = new long[SEGMENT_COUNT];
-    private final ScheduledExecutorService holdExecutor = Executors.newSingleThreadScheduledExecutor();
-    private final ScheduledFuture<?>[] holdTasks = new ScheduledFuture<?>[SEGMENT_COUNT];
+    private boolean[] holdSnapshot = new boolean[SEGMENT_COUNT];
+    private boolean caWasEnabled;
+    private boolean caHoldActive;
+    private long caHoldDeadlineMs;
     private volatile boolean powered;
 
     /** Konštruktor pre paletku (ItemPicker). */
@@ -266,47 +263,60 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     @Override
     public void simulate() {
-        // všetky vstupy sú aktívne v 0: segment svieti, keď je jeho vstup logická 0
-        // a súčasne je logická 0 aj na CA (spoločná anóda = master spínanie displeja)
-        boolean enabled = isLow(caPin);
-        boolean powerChanged = enabled != powered;
-        powered = enabled;
+        long now = System.currentTimeMillis();
+        boolean caEnabled = isLow(caPin); // CA=LOW => displej aktivovaný
 
-        boolean[] newLit = new boolean[SEGMENT_COUNT];
-        for (int i = 0; i < SEGMENT_COUNT; i++) {
-            newLit[i] = enabled && isLow(segmentPins.get(i));
+        if (caEnabled) {
+            // CA vrátené do aktívneho stavu: timeout sa zruší a displej pracuje normálne.
+            caWasEnabled = true;
+            caHoldActive = false;
+            caHoldDeadlineMs = 0L;
+            powered = true;
+
+            boolean[] newLit = new boolean[SEGMENT_COUNT];
+            for (int i = 0; i < SEGMENT_COUNT; i++) {
+                newLit[i] = isLow(segmentPins.get(i));
+            }
+
+            applyLitState(newLit, true);
+            return;
         }
 
-        applyLitState(newLit, powerChanged);
+        // CA = HIGH = neaktívne. Triggerujeme hold iba na prechode 0->1.
+        if (caWasEnabled) {
+            caWasEnabled = false;
+            caHoldActive = true;
+            caHoldDeadlineMs = now + CA_HOLD_MS;
+            holdSnapshot = Arrays.copyOf(litSegments, SEGMENT_COUNT);
+            powered = true;
+            applyLitState(holdSnapshot, true);
+            return;
+        }
+
+        if (caHoldActive) {
+            if (now >= caHoldDeadlineMs) {
+                caHoldActive = false;
+                powered = false;
+                applyLitState(new boolean[SEGMENT_COUNT], true);
+            } else {
+                powered = true;
+                applyLitState(holdSnapshot, false);
+            }
+            return;
+        }
+
+        // Po timeoute ostane displej vypnutý, kým sa CA nevráti na LOW.
+        powered = false;
+        applyLitState(new boolean[SEGMENT_COUNT], true);
     }
 
     private void applyLitState(boolean[] newLit, boolean powerChanged) {
-        long now = System.nanoTime() / 1_000_000L;
         boolean changed = powerChanged;
 
         for (int i = 0; i < SEGMENT_COUNT; i++) {
             boolean desired = newLit[i];
-
-            if (desired) {
-                cancelHoldTimer(i);
-                if (!litSegments[i]) {
-                    litSegments[i] = true;
-                    segmentOffDeadline[i] = 0L;
-                    changed = true;
-                }
-                continue;
-            }
-
-            if (litSegments[i] && segmentOffDeadline[i] == 0L) {
-                segmentOffDeadline[i] = now + MIN_SEGMENT_HOLD_MS;
-                scheduleHoldOff(i, MIN_SEGMENT_HOLD_MS);
-                changed = true;
-            }
-
-            if (litSegments[i] && segmentOffDeadline[i] != 0L && now >= segmentOffDeadline[i]) {
-                litSegments[i] = false;
-                segmentOffDeadline[i] = 0L;
-                cancelHoldTimer(i);
+            if (litSegments[i] != desired) {
+                litSegments[i] = desired;
                 changed = true;
             }
         }
@@ -316,41 +326,16 @@ public class SevenSegmentDisplay extends GateSymbol {
         }
     }
 
-    private void cancelHoldTimer(int index) {
-        ScheduledFuture<?> task = holdTasks[index];
-        if (task != null && !task.isDone()) {
-            task.cancel(false);
-        }
-        holdTasks[index] = null;
-    }
-
-    private void scheduleHoldOff(int index, long delayMs) {
-        cancelHoldTimer(index);
-        holdTasks[index] = holdExecutor.schedule(() -> {
-            if (!powered || !segmentShapes[index].isVisible()) {
-                return;
-            }
-            Platform.runLater(() -> {
-                if (!powered) {
-                    return;
-                }
-                litSegments[index] = false;
-                segmentOffDeadline[index] = 0L;
-                refreshVisual();
-            });
-        }, delayMs, TimeUnit.MILLISECONDS);
-    }
-
     @Override
     public void reset() {
         for (Pin pin : getPins()) {
             setPinForce(pin, Pin.PinState.NOT_CONNECTED);
         }
-        for (int i = 0; i < SEGMENT_COUNT; i++) {
-            cancelHoldTimer(i);
-        }
         litSegments = new boolean[SEGMENT_COUNT];
-        segmentOffDeadline = new long[SEGMENT_COUNT];
+        holdSnapshot = new boolean[SEGMENT_COUNT];
+        caWasEnabled = false;
+        caHoldActive = false;
+        caHoldDeadlineMs = 0L;
         powered = false;
         refreshVisual();
     }

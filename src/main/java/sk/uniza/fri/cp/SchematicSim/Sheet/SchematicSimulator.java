@@ -14,6 +14,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Simulačné jadro. Nahrádza {@code BoardSimulator} z BreadboardSim - narozdiel od neho
@@ -71,16 +72,19 @@ public class SchematicSimulator {
                                 // počas čakania CPU na ustálenie naozaj bežala, alebo bola zablokovaná
                                 Bus.getBus().reportSimLoopActivity();
 
-                                event = eventsQueue.poll();
+                                event = eventsQueue.poll(50, TimeUnit.MILLISECONDS);
                                 if (event == null) {
                                     if (eventsQueue.size() > 0) {
                                         event = eventsQueue.take();
                                     } else {
                                         // simulácia je ustálená - CPU môže bezpečne čítať dáta zo zbernice
+                                        // ale niektoré súčiastky (napr. 7-segmentové hold-timeouty) potrebujú
+                                        // periodické vyhodnotenie aj bez novej elektrickej udalosti.
+                                        allGates.forEach(GateSymbol::simulate);
                                         Bus.getBus().dataInSteadyState();
                                         steadyState = true;
-                                        event = eventsQueue.take();
                                         lastActivityTime = System.currentTimeMillis();
+                                        continue;
                                     }
                                 }
 
