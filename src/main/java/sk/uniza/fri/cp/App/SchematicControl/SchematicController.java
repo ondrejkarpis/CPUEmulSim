@@ -33,6 +33,7 @@ import sk.uniza.fri.cp.SchematicSim.Gates.NandGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NorGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.NotGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.OrGate;
+import sk.uniza.fri.cp.SchematicSim.Gates.XorGate;
 import sk.uniza.fri.cp.SchematicSim.Gates.Ram8k;
 import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
@@ -98,7 +99,7 @@ public class SchematicController {
 
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
-        editableArea.setDividerPositions(0.12);
+        editableArea.setDividerPositions(0.13);
 
         this.root = new BorderPane();
         this.root.setTop(buildToolbar());
@@ -169,6 +170,7 @@ public class SchematicController {
         picker.registerItem(new OrGate());
         picker.registerItem(new NandGate());
         picker.registerItem(new NorGate());
+        picker.registerItem(new XorGate());
 
         //ostatné zariadenia
         picker.registerItem(new Register8());
