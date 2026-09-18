@@ -1263,11 +1263,11 @@ public class Wire extends HighlightGroup {
     }
 
     /**
-     * Rerouting vodiča podľa kontextového menu - zmaže všetky vnútorné ohyby a znovu
-     * vypočíta ortogonálnu trasu medzi oboma koncami. Používa sa na vyrovnanie vodiča
-     * (napr. po neprehľadnom ťahaní). Spájače (WireJunction) sa neriešia - tie nie sú
-     * súčasťou {@link #joints} v novom modeli a rerouting medzi ich koncami necháva
-     * odbočky nedotknuté.
+     * Rerouting celého vodiča - zmaže všetky vnútorné ohyby a znovu vypočíta ortogonálnu
+     * trasu medzi oboma koncami. Používa sa pri vyrovnaní vodiča (položka "Reroute"
+     * v kontextovom menu) aj po presune spájača (WireJunction), aby sa preroutoval celý
+     * vodič a nielen segment pri spájači. Spájače (WireJunction) nie sú súčasťou
+     * {@link #joints} v novom modeli a rerouting medzi koncami ich necháva nedotknuté.
      */
     public void reroute() {
         if (getSheet() == null || !getSheet().isEditingEnabled()) return;

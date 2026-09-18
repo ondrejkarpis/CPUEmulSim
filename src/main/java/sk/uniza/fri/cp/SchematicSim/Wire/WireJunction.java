@@ -167,7 +167,7 @@ public class WireJunction extends Joint implements Connectable {
         for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
             Wire wire = end.getWire();
             if (wire != null) {
-                wire.settleToGrid();
+                wire.reroute();
                 wire.updatePotential();
             }
         }
