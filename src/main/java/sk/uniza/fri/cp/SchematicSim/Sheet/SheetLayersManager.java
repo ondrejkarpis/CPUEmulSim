@@ -41,7 +41,7 @@ public class SheetLayersManager {
         this.gatesLayer.setMinWidth(this.backgroundLayer.getBoundsInParent().getWidth());
         this.gatesLayer.setMinHeight(this.backgroundLayer.getBoundsInParent().getHeight());
 
-        this.layers = new Group(backgroundLayer, gatesLayer, wiresLayer, junctionsLayer);
+        this.layers = new Group(backgroundLayer, wiresLayer, gatesLayer, junctionsLayer);
 
         this.gatesLayer.setPickOnBounds(false);
         this.wiresLayer.setPickOnBounds(false);
