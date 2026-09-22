@@ -6,6 +6,7 @@ import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SheetChangeEvent;
+import sk.uniza.fri.cp.SchematicSim.Sheet.SheetEvent;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 
 import java.util.Collections;
@@ -177,6 +178,41 @@ public abstract class GateSymbol extends Item {
             default: value = Potential.Value.NC;
         }
         getSheet().addEvent(new SheetChangeEvent(pin, value));
+    }
+
+    /**
+     * Nastavenie výstupného pinu z asynchrónnej strany (zbernica z vlákna CPU) s okamžitým
+     * zapísaním hodnoty na vlastný potenciál pinu. Potenciál siete sa tak aktualizuje v tom
+     * istom okamihu ako stav pinu - nevzniká okno, počas ktorého vstupy hradiel čítajú NC
+     * a {@link #isHigh}/{@link #isLow} by ich náhodne zrandomizovali.
+     * <p>
+     * Na rozdiel od {@link #setPin} sa NEspolieha na neskoršie spracovanie udalosti - posiela
+     * iba "prebúdzaciu" udalosť ({@link SheetEvent}), aby simulácia znovu vyhodnotila súčiastky
+     * so vstupmi na danej sieti. Udalosť sa posiela iba pri skutočnej zmene (stav pinu alebo
+     * výsledná hodnota siete).
+     */
+    public void setPinAndCommit(Pin pin, Pin.PinState state) {
+        Pin.PinState oldState = pin.getState();
+        Potential.Value value;
+        switch (state) {
+            case HIGH: value = Potential.Value.HIGH; break;
+            case LOW: value = Potential.Value.LOW; break;
+            default: value = Potential.Value.NC;
+        }
+        Potential aggregate = pin.getPotential();
+        Potential.Value oldAggregate = aggregate != null ? aggregate.getValue() : null;
+
+        pin.setState(state);
+        if (pin.getOwnedPotential() != null) {
+            pin.getOwnedPotential().setValue(value);
+        }
+
+        boolean aggregateChanged = oldAggregate != null
+                && aggregate != null
+                && oldAggregate != aggregate.getValue();
+        if (oldState != state || aggregateChanged) {
+            getSheet().addEvent(new SheetEvent(pin));
+        }
     }
 
     @Override

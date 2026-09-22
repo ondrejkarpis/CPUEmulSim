@@ -7,9 +7,9 @@ import javafx.concurrent.Service;
 import javafx.concurrent.Task;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
-import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +28,8 @@ import java.util.concurrent.TimeUnit;
 public class SchematicSimulator {
 
     private static final int ASYNCH_TIMEOUT_MS = 5000;
+    /** Ako často sa vyhodnocujú všetky hradlá, keď nie sú žiadne udalosti (neustála simulácia). */
+    private static final int IDLE_TICK_MS = 5;
 
     private final LinkedBlockingQueue<SheetEvent> eventsQueue;
     private List<GateSymbol> allGates;
@@ -42,15 +44,9 @@ public class SchematicSimulator {
                     Thread.currentThread().setName("SchematicSimulationThread");
 
                     // celý beh simulácie je v try/finally - pri akejkoľvek chybe alebo rušení
-                    // sa musí vždy odpojiť od zbernice, inak by CPU navždy čakalo na ustálenie
-                    // dát (isSimulationRunning by ostalo true a waitForSteadyState by sa zacyklilo)
+                    // sa musí vždy dokončiť posledné vyhodnotenie hradiel
                     try {
                         setRunningQuietly(true);
-
-                        // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
-                        Bus.getBus().setEventsQueue(eventsQueue);
-                        Bus.getBus().simulationIsRunning(true);
-                        Bus.getBus().simulationProcessingStarts(); // ešte nie je idle - počiatočné spracovanie
 
                         // počiatočné vyhodnotenie - nahrádza powerSockets.forEach(PowerSocket::powerUp)
                         allGates.forEach(GateSymbol::reset);
@@ -64,25 +60,39 @@ public class SchematicSimulator {
                         HashSet<GateSymbol> gatesToUpdate = new HashSet<>();
                         SheetEvent event;
                         long lastActivityTime = System.currentTimeMillis();
-                        boolean steadyState = false;
+
+                        // jednoduché meranie rýchlosti simulácie - počítadlá behu slučky
+                        long gateSims = 0;
+                        long sevenSegSims = 0;
+                        long eventCount = 0;
+                        long lastReportMs = System.currentTimeMillis();
 
                         while (!isCancelled()) {
                             try {
-                                // heart-beat pre diagnostiku - Bus vie povedať, či simulačná slučka
-                                // počas čakania CPU na ustálenie naozaj bežala, alebo bola zablokovaná
-                                Bus.getBus().reportSimLoopActivity();
+                                // raz za sekundu vypíš koľko simulácii hradiel prebehlo
+                                long nowMs = System.currentTimeMillis();
+                                if (nowMs - lastReportMs >= 1000) {
+                                    System.out.println("[Sim] " + gateSims + " simulácii hradiel/s"
+                                            + " (z toho 7-seg: " + sevenSegSims + ", spracovaných udalostí: " + eventCount + ")");
+                                    gateSims = 0;
+                                    sevenSegSims = 0;
+                                    eventCount = 0;
+                                    lastReportMs = nowMs;
+                                }
 
-                                event = eventsQueue.poll(50, TimeUnit.MILLISECONDS);
+                                event = eventsQueue.poll(IDLE_TICK_MS, TimeUnit.MILLISECONDS);
                                 if (event == null) {
                                     if (eventsQueue.size() > 0) {
                                         event = eventsQueue.take();
                                     } else {
-                                        // simulácia je ustálená - CPU môže bezpečne čítať dáta zo zbernice
-                                        // ale niektoré súčiastky (napr. 7-segmentové hold-timeouty) potrebujú
-                                        // periodické vyhodnotenie aj bez novej elektrickej udalosti.
-                                        allGates.forEach(GateSymbol::simulate);
-                                        Bus.getBus().dataInSteadyState();
-                                        steadyState = true;
+                                        // neustála simulácia - aj bez novej elektrickej udalosti sa
+                                        // pravidelne vyhodnotia všetky hradlá (napr. 7-segmentové
+                                        // hold-timeouty potrebujú periodický tick na zhasínanie)
+                                        for (GateSymbol gate : allGates) {
+                                            gate.simulate();
+                                            gateSims++;
+                                            if (gate instanceof SevenSegmentDisplay) sevenSegSims++;
+                                        }
                                         lastActivityTime = System.currentTimeMillis();
                                         continue;
                                     }
@@ -109,32 +119,24 @@ public class SchematicSimulator {
                                     }
                                 }
 
-if (steadyState) {
-                                // podujatie sa našlo - dáta sa menia, CPU nesmie čítať
-                                // a hlavne: zneplatnime príznak idle, aby CPU neakceptovalo
-                                // príliš skoré ustálenie (napr. pri burstovom fronte)
-                                Bus.getBus().simulationProcessingStarts();
-                                steadyState = false;
-                            }
-
                                 event.process(gatesToUpdate);
-                                gatesToUpdate.forEach(GateSymbol::simulate);
+                                eventCount++;
+                                for (GateSymbol gate : gatesToUpdate) {
+                                    gate.simulate();
+                                    gateSims++;
+                                    if (gate instanceof SevenSegmentDisplay) sevenSegSims++;
+                                }
                                 gatesToUpdate.clear();
                                 lastActivityTime = System.currentTimeMillis();
 
                             } catch (InterruptedException e) {
                                 if (isCancelled()) break;
                             } catch (RuntimeException e) {
-                                // jeden chybny event nesmie zhltit celu simulaciu - inak by CPU
-                                // navzdy cakalo na ustalenie zbernice (isSimulationRunning ostane true)
+                                // jeden chybny event nesmie zhltit celu simulaciu
                                 e.printStackTrace(System.err);
                                 gatesToUpdate.clear();
                             }
                         }
-
-                        // zostatok udalosti po rušení - označiť, že simulácia ešte spracúva,
-                        // aby CPU vedelo, že dátová zbernica nie je ustálená
-                        Bus.getBus().simulationProcessingStarts();
 
                         // zostatok udalosti po rušení - vyhodnot, aby piny nezostali v nekonzistentnom stave
                         while (!eventsQueue.isEmpty()) {
@@ -150,11 +152,7 @@ if (steadyState) {
                         t.printStackTrace(System.err);
                     } finally {
                         System.err.println("[Sim] Koniec simulácie (isCancelled=" + isCancelled() + ")");
-                        try {
-                            setRunningQuietly(false);
-                        } finally {
-                            Bus.getBus().simulationIsRunning(false);
-                        }
+                        setRunningQuietly(false);
                     }
                     return null;
                 }

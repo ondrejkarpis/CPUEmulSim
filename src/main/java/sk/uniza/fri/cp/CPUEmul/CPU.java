@@ -13,7 +13,6 @@ import sk.uniza.fri.cp.CPUEmul.Exceptions.NonExistingInterruptLabelException;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.charset.Charset;
 import java.security.InvalidParameterException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
@@ -76,6 +75,11 @@ public class CPU extends Thread {
 
     /** Zbernica */
     private final Bus bus;
+
+    //casové konštanty zbernice - CPU sa nesynchronizuje s udalosťami simulácie,
+    //signály nastavuje iba na základe reálneho času (ako skutočný obvod)
+    private static final long BUS_STROBE_MS = 5; //dĺžka aktívneho impulzu IW_/MW_/IR_/MR_/IA_ = 0
+    private static final long BUS_HOLD_MS = 1; //pauza po zrušení signálu, aby sa dáta zapísali
 
     public static void startTimesDebug() {
         timesLogger = LogManager.getLogger("times_CPU");
@@ -837,7 +841,7 @@ public class CPU extends Thread {
      *
      * @throws NonExistingInterruptLabelException Výnimka, ak neexistuje načítané číslo prerušenia.
      */
-    private void handleInterrupt() throws NonExistingInterruptLabelException {
+    private void handleInterrupt() throws NonExistingInterruptLabelException, InterruptedException {
         //vypnutie preruseni
         flagIE = false;
 
@@ -846,7 +850,8 @@ public class CPU extends Thread {
 //        System.out.println("IA_ LOW");
         bus.setIA_(false);
 //        LOGGER.debug("IA_ Cakanie na steady state");
-        this.waitForSteadySimulation(null, true);
+        this.busStrobeWait(BUS_STROBE_MS);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 //        LOGGER.debug("IA_ Nacitanie dat");
         byte data = bus.getDataBus();
 //        LOGGER.debug("IA_ Nacitane " + Byte.toUnsignedInt(data));
@@ -978,7 +983,7 @@ public class CPU extends Thread {
 
         //cakanie na nastavenie dat na datovej zbernici
         //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
+        this.busStrobeWait(BUS_STROBE_MS);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //nacitaj data
@@ -1028,7 +1033,7 @@ public class CPU extends Thread {
             bus.setMW_(false);
 
         //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
+        this.busStrobeWait(BUS_STROBE_MS);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //zrusenie priznaku
@@ -1039,7 +1044,7 @@ public class CPU extends Thread {
             bus.setMW_(true);
 
         //cakanie, aby sa nezapisali nespravne data
-        this.waitForSteadySimulation(inst, false);
+        this.busStrobeWait(BUS_HOLD_MS);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //zrusenie dat
@@ -1078,29 +1083,21 @@ public class CPU extends Thread {
         cdlHalt = null;
     }
 
-    private long lastErrorMsgPrint = 0;
-
     /**
-     * Pasívne čakanie na nastavenie dát na dátovej zbernici pre ich čítanie.
+     * Reálny časový impulz na zbernici. CPU nastaví alebo zruší signál a počas vyčkávania ho
+     * priebežne odsimuluje nezávislé simulačné vlákno. CPU sa neblokuje na udalostiach simulácie,
+     * iba vyčká reálny čas (ako v skutočnom obvode).
      *
-     * @param inst Inštrukcia, ktorá požaduje čítanie. Null ak sa jedná o IT.
-     * @param showConsoleMsg True ak sa má zobraziť chybová správa v konzole, false ak nie.
+     * @param ms Dĺžka vyčkania v milisekundách.
+     * @throws InterruptedException Prerušenie počas čakania.
      */
-    private void waitForSteadySimulation(enumInstructionsSet inst, boolean showConsoleMsg) {
-        try {
-            if (!bus.waitForSteadyState() && isExecuting) {
-                //data nie su nastavene (simulator nebezi alebo nie je 5 sekund na nastavenie dat dostacujucich)
-                if (System.currentTimeMillis() - lastErrorMsgPrint > 2000) {
-                    console.write(
-                            ("Pozor! Chyba zbernice. Spustite prosim simulaciu a usisite sa, ze nedochadza k zacykleniu. ")
-                            .getBytes(Charset.forName("UTF-8")));
-                    console.write(10);
-                    console.write(13);
-                    lastErrorMsgPrint = System.currentTimeMillis();
-                }
-            }
-        } catch (IOException e) {
-            //e.printStackTrace();
+    private void busStrobeWait(long ms) throws InterruptedException {
+        if (ms <= 0) return;
+        long end = System.nanoTime() + ms * 1_000_000L;
+        while (isExecuting) {
+            long remaining = (end - System.nanoTime()) / 1_000_000L;
+            if (remaining <= 0) break;
+            Thread.sleep(Math.min(remaining, 10));
         }
     }
 

@@ -38,6 +38,7 @@ public class Register8 extends GateSymbol {
     private Pin pinLE;
 
     private int latch = 0;
+    private boolean lastLeHigh;
 
     /** Konštruktor pre paletku (ItemPicker). */
     public Register8() {
@@ -135,10 +136,15 @@ public class Register8 extends GateSymbol {
 
     @Override
     public void simulate() {
-        // počas aktívneho LE (log. 1) sa dáta transparentne premietajú do registra
-        if (isHigh(pinLE)) {
-            latch = readData();
+        // Vzorkovanie na nastupnú hranu LE (0 -> 1). Na rozdiel od transparentného
+        // latchu sa dáta zachytia IBA raz, v okamihu príchodu strobu. Tým sa
+        // zabráni re-latchovaniu čiastočných/stale hodnôt, ktoré v eventovej
+        // simulácii počas trvania LE na zbernici doznievajú (príčina "presvitu").
+        boolean leHigh = isHigh(pinLE);
+        if (leHigh && !lastLeHigh) {
+            latch = readData() & 0xFF;
         }
+        lastLeHigh = leHigh;
 
         // pri aktívnom OE_ (log. 0) outputs hná obsah registra, inak sú v Z
         if (isLow(pinOE_)) {
