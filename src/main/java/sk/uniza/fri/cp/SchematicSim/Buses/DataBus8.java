@@ -562,7 +562,10 @@ public class DataBus8 extends BusSymbol {
         this.data = Byte.toUnsignedInt(getBus().getDataBus());
         for (TapPoint tap : taps) {
             boolean high = (data & (1 << tap.bit)) != 0;
-            setPinAndCommit(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            commitPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        }
+        if (!taps.isEmpty()) {
+            wakePin(taps.get(0).pin);
         }
         scheduleTapVisuals();
     }
@@ -588,13 +591,15 @@ public class DataBus8 extends BusSymbol {
             // aby mohol obvod odpovedať na zbernicu
             read = true;
             for (TapPoint tap : taps) {
-                setPinAndCommit(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                commitPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
+            if (!taps.isEmpty()) wakePin(taps.get(0).pin);
         } else if (!readActive && read) {
             read = false;
             for (TapPoint tap : taps) {
-                setPinAndCommit(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                commitPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
+            if (!taps.isEmpty()) wakePin(taps.get(0).pin);
         }
     }
 

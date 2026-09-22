@@ -80,6 +80,7 @@ public class CPU extends Thread {
     //signály nastavuje iba na základe reálneho času (ako skutočný obvod)
     private static final long BUS_STROBE_MS = 5; //dĺžka aktívneho impulzu IW_/MW_/IR_/MR_/IA_ = 0
     private static final long BUS_HOLD_MS = 1; //pauza po zrušení signálu, aby sa dáta zapísali
+    private static final long BUS_RELEASE_WAIT_MS = 10; //kratká pauza pred uvoľnením zberníc, aby sa stihol zmeniť LE = 0
 
     public static void startTimesDebug() {
         timesLogger = LogManager.getLogger("times_CPU");
@@ -997,7 +998,8 @@ public class CPU extends Thread {
             bus.setIR_(true);
         else
             bus.setMR_(true);
-        // nahodne data
+        //zrusenie dat
+        microstepAwait("Zrusenie dat");
         bus.setRandomData();
 
         //zrus adresu
@@ -1047,13 +1049,17 @@ public class CPU extends Thread {
         this.busStrobeWait(BUS_HOLD_MS);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //zrusenie dat
-        microstepAwait("Zrusenie dat");
-        bus.setRandomData();
+        //kratke cakanie, aby simulacia stihla zmenit LE na 0 pred uvolnenim zbernic
+        this.busStrobeWait(BUS_RELEASE_WAIT_MS);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //zrusenie adresy
+        //najprv uvolnime adresu - zmena AB0/AB1 donuti dekoder prehodnotit LE pri IW_=1
         microstepAwait("Zrusenie adresy");
         bus.setRandomAddress();
+
+        //az potom data, aby sa register uz nepreklopil na nahodnu hodnotu
+        microstepAwait("Zrusenie dat");
+        bus.setRandomData();
     }
 
     /**

@@ -461,9 +461,14 @@ public class AddressBus16 extends BusSymbol {
 
     @Override
     public void syncFromBus() {
+        int address = Short.toUnsignedInt(getBus().getAddressBus());
         for (TapPoint tap : taps) {
-            driveTap(tap);
+            commitPin(tap.pin, (address & (1 << tap.bit)) != 0 ? Pin.PinState.HIGH : Pin.PinState.LOW);
         }
+        if (!taps.isEmpty()) {
+            wakePin(taps.get(0).pin);
+        }
+        scheduleTapVisuals();
     }
 
     /**

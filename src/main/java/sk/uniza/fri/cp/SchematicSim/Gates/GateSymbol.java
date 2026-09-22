@@ -215,6 +215,32 @@ public abstract class GateSymbol extends Item {
         }
     }
 
+    /**
+     * Okamžité zapísanie stavu a hodnoty potenciálu pinu BEZ prebúdzania súčiastok.
+     * Používa zbernica pri hromadnom zapisovaní viac bitov naraz - prebudí sa až po
+     * zapísaní celej hodnoty (cez {@link #wakePin}), aby transparentný register nikdy
+     * nesamploval čiastočne zapísané dáta.
+     */
+    public void commitPin(Pin pin, Pin.PinState state) {
+        pin.setState(state);
+        Potential.Value value;
+        switch (state) {
+            case HIGH: value = Potential.Value.HIGH; break;
+            case LOW: value = Potential.Value.LOW; break;
+            default: value = Potential.Value.NC;
+        }
+        if (pin.getOwnedPotential() != null) {
+            pin.getOwnedPotential().setValue(value);
+        }
+    }
+
+    /**
+     * Prebudenie súčiastok so vstupmi na sieti daného pinu bez zmeny hodnoty potenciálu.
+     */
+    public void wakePin(Pin pin) {
+        getSheet().addEvent(new SheetEvent(pin));
+    }
+
     @Override
     public void delete() {
         super.delete();
