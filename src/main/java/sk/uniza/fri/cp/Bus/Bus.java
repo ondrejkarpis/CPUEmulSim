@@ -166,7 +166,7 @@ public class Bus{
                 }
 
                 try {
-                    steadyMonitor.wait(100);
+                    steadyMonitor.wait(1);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return false;
@@ -184,6 +184,7 @@ public class Bus{
     }
 
     private long lastSteadyDiagPrint = 0;
+
     /** Heartbeat simulácie - čas (ms) posledného prechodu simulačnou slučkou (na diagnostiku). */
     private volatile long simLoopHeartbeatMs = 0;
 

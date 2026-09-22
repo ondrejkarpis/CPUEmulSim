@@ -29,6 +29,9 @@ public class SchematicSimulator {
 
     private static final int ASYNCH_TIMEOUT_MS = 5000;
 
+    /** Čas (ms), ako dlho čaká simulačná slučka na udalosť, kým vyhlási ustálený stav. */
+    private static final int IDLE_POLL_TIMEOUT_MS = 5;
+
     private final LinkedBlockingQueue<SheetEvent> eventsQueue;
     private List<GateSymbol> allGates;
     private final BooleanProperty running;
@@ -72,7 +75,7 @@ public class SchematicSimulator {
                                 // počas čakania CPU na ustálenie naozaj bežala, alebo bola zablokovaná
                                 Bus.getBus().reportSimLoopActivity();
 
-                                event = eventsQueue.poll(50, TimeUnit.MILLISECONDS);
+                                event = eventsQueue.poll(IDLE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                                 if (event == null) {
                                     if (eventsQueue.size() > 0) {
                                         event = eventsQueue.take();
@@ -121,6 +124,15 @@ if (steadyState) {
                                 gatesToUpdate.forEach(GateSymbol::simulate);
                                 gatesToUpdate.clear();
                                 lastActivityTime = System.currentTimeMillis();
+
+                                // okamžité ohlásenie ustálenia - CPU nemusí čakať na ďalší idle poll.
+                                // Bezpečné aj pri burstovom fronte: waitForSteadyState požaduje zároveň
+                                // prázdny front (queue.size()==0) aj idle, a nasledujúca udalosť
+                                // (ak príde) zneplatní idle cez simulationProcessingStarts().
+                                if (eventsQueue.isEmpty()) {
+                                    Bus.getBus().dataInSteadyState();
+                                    steadyState = true;
+                                }
 
                             } catch (InterruptedException e) {
                                 if (isCancelled()) break;
