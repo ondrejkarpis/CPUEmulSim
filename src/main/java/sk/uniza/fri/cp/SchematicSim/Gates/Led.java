@@ -56,8 +56,7 @@ public class Led extends GateSymbol {
 
     private volatile boolean on = false;
     private boolean wasHigh = false;
-    private boolean holdActive = false;
-    private long holdDeadlineMs = 0L;
+    private long litSinceMs = 0L;
     private volatile Color ledColor = LED_COLORS.get("Červená");
 
     /** Konštruktor pre paletku (ItemPicker). */
@@ -195,34 +194,29 @@ public class Led extends GateSymbol {
         applyInputState(high, now);
     }
 
+    /**
+     * Stavový automat svietenia. LED svieti počas HIGH a ešte minimálne {@code INPUT_HOLD_MS}
+     * od posledného prechodu LOW->HIGH. Ak už svieti aspoň 100 ms a vstup klesne na LOW,
+     * zhasne okamžite; krátky impulz zaručí svietenie na 100 ms.
+     */
     private void applyInputState(boolean high, long now) {
         if (high) {
-            wasHigh = true;
-            holdActive = false;
-            holdDeadlineMs = 0L;
-            setLitState(true);
-            return;
-        }
-
-        if (wasHigh) {
-            wasHigh = false;
-            holdActive = true;
-            holdDeadlineMs = now + INPUT_HOLD_MS;
-            setLitState(true);
-            return;
-        }
-
-        if (holdActive) {
-            if (now >= holdDeadlineMs) {
-                holdActive = false;
-                setLitState(false);
-            } else {
-                setLitState(true);
+            if (!wasHigh) {
+                // LOW->HIGH: reštart počítania minimálnej doby svietenia
+                wasHigh = true;
+                litSinceMs = now;
             }
+            setLitState(true);
             return;
         }
 
-        setLitState(false);
+        if (wasHigh) wasHigh = false;
+
+        if (on && now - litSinceMs < INPUT_HOLD_MS) {
+            setLitState(true);
+        } else {
+            setLitState(false);
+        }
     }
 
     private void setLitState(boolean lit) {
@@ -236,8 +230,7 @@ public class Led extends GateSymbol {
     public void reset() {
         if (pinIn != null) setPinForce(pinIn, Pin.PinState.NOT_CONNECTED);
         wasHigh = false;
-        holdActive = false;
-        holdDeadlineMs = 0L;
+        litSinceMs = 0L;
         setLitState(false);
     }
 

@@ -8,35 +8,62 @@ import java.lang.reflect.Method;
 
 public class LedTest {
 
-    @Test
-    public void shouldKeepLedLitFor100msAfterInputFallsToLow() throws Exception {
-        Led led = new Led();
+    private static final long HOLD = 100L;
 
+    @Test
+    public void shouldKeepLedLitFor100msAfterShortHighPulse() throws Exception {
+        Led led = new Led();
+        long t0 = System.currentTimeMillis();
+        applyInput(led, true, t0);
+        Assert.assertTrue("LED should be lit while input is HIGH.", lit(led));
+
+        applyInput(led, false, t0 + 30L);
+        Assert.assertTrue("LED should stay lit after a short HIGH pulse (< 100 ms).", lit(led));
+
+        applyInput(led, false, t0 + 99L);
+        Assert.assertTrue("LED should still be lit before the 100 ms minimum elapses.", lit(led));
+
+        applyInput(led, false, t0 + HOLD);
+        Assert.assertFalse("LED should turn off once the 100 ms minimum is reached.", lit(led));
+    }
+
+    @Test
+    public void shouldTurnOffImmediatelyWhenAlreadyLitFor100ms() throws Exception {
+        Led led = new Led();
+        long t0 = System.currentTimeMillis();
+        applyInput(led, true, t0);
+        Assert.assertTrue(lit(led));
+
+        applyInput(led, false, t0 + HOLD);
+        Assert.assertFalse("LED lit for >= 100 ms should turn off immediately on falling edge.", lit(led));
+    }
+
+    @Test
+    public void repeatedHighShouldRestartTheCounting() throws Exception {
+        Led led = new Led();
+        long t0 = System.currentTimeMillis();
+
+        applyInput(led, true, t0);
+        applyInput(led, false, t0 + 30L);
+        Assert.assertTrue("LED lit by first pulse before hold expires.", lit(led));
+
+        applyInput(led, true, t0 + 60L);
+        applyInput(led, false, t0 + 90L);
+        Assert.assertTrue("After repeated HIGH the 100 ms window restarts.", lit(led));
+
+        applyInput(led, false, t0 + 90L + HOLD);
+        Assert.assertFalse("LED should turn off once the restarted 100 ms window expires.", lit(led));
+    }
+
+    private static boolean lit(Led led) throws Exception {
         Field onField = Led.class.getDeclaredField("on");
         onField.setAccessible(true);
-        onField.setBoolean(led, true);
+        return onField.getBoolean(led);
+    }
 
-        Field wasHighField = Led.class.getDeclaredField("wasHigh");
-        wasHighField.setAccessible(true);
-        wasHighField.setBoolean(led, true);
-
+    private static void applyInput(Led led, boolean high, long now) throws Exception {
         Method applyInputState = Led.class.getDeclaredMethod("applyInputState", boolean.class, long.class);
         applyInputState.setAccessible(true);
-
-        long now = System.currentTimeMillis();
-        applyInputState.invoke(led, false, now);
-
-        Assert.assertTrue("LED should remain lit immediately after the input falls to LOW.", onField.getBoolean(led));
-
-        Field holdActiveField = Led.class.getDeclaredField("holdActive");
-        holdActiveField.setAccessible(true);
-        Assert.assertTrue("Hold timer should become active when the signal drops to LOW.", holdActiveField.getBoolean(led));
-
-        Field holdDeadlineMsField = Led.class.getDeclaredField("holdDeadlineMs");
-        holdDeadlineMsField.setAccessible(true);
-        long deadline = holdDeadlineMsField.getLong(led);
-
-        applyInputState.invoke(led, false, deadline + 1L);
-        Assert.assertFalse("LED should turn off after the 100 ms hold expires.", onField.getBoolean(led));
+        applyInputState.invoke(led, high, now);
     }
 }
