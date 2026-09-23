@@ -280,9 +280,16 @@ public class SchematicSheet extends ScrollPane {
         });
 
         final javafx.beans.property.ObjectProperty<Point2D> lastMouseCoordinates = new javafx.beans.property.SimpleObjectProperty<>();
-        scrollContent.setOnMousePressed(event -> lastMouseCoordinates.set(new Point2D(event.getX(), event.getY())));
+        //kotva panu sa zachytáva vo fáze capture (event filter) - aj keď hradlo/vodič v bublinovej
+        //fáze MOUSE_PRESSED spotrebuje (otvorenie kontextového menu), kotva má aktuálnu polohu.
+        //Pri bublinovom setOnMousePressed by po pravom kliknutí bola kotva zastaraná a následný
+        //minimálny ťah by schémy posunul o celú vzdialenosť od staršej polohy.
+        scrollContent.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> lastMouseCoordinates.set(new Point2D(event.getX(), event.getY())));
 
         scrollContent.setOnMouseDragged(event -> {
+            //pan sa nepoužíva s pravým tlačidlom - po zobrazení kontextového menu by pohyb myši
+            //(ešte so stlačeným tlačidlom) posúval schému a nie výber položky menu
+            if (event.getButton() == MouseButton.SECONDARY) return;
             //delta proti poslednej polohe (nie proti bodu stlačenia) - inak by sa aplikoval
             //celý ťah od stlačenia pri KAŽDOM drag evente a plocha by utekala a menila smer
             double deltaX = event.getX() - lastMouseCoordinates.get().getX();

@@ -1,8 +1,12 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.beans.binding.Bindings;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -33,6 +37,8 @@ public class Ram8k extends GateSymbol {
     private static final int GRID_HEIGHT = 14;
 
     private final byte[] memory = new byte[8192];
+    private final ContextMenu contextMenu = new ContextMenu();
+    private RAMContentWindow contentWindow;
 
     private Pin[] addressPins;
     private Pin[] dataPins;
@@ -63,6 +69,35 @@ public class Ram8k extends GateSymbol {
 
     public Ram8k(SchematicSheet sheet) {
         super(sheet);
+        buildContextMenu();
+        this.addEventHandler(MouseEvent.MOUSE_PRESSED, this::showContextMenu);
+    }
+
+    /**
+     * Vytvorenie a naviazanie kontextového menu s položkou "Obsah" (zobrazenie obsahu pamäte).
+     */
+    private void buildContextMenu() {
+        MenuItem contentItem = new MenuItem("Obsah");
+        contentItem.setOnAction(event -> openContentWindow());
+        contextMenu.getItems().add(contentItem);
+    }
+
+    /**
+     * Zobrazenie kontextového menu po stlačení pravého tlačidla myši.
+     */
+    private void showContextMenu(MouseEvent event) {
+        if (event.getButton() == MouseButton.SECONDARY) {
+            contextMenu.show(this, event.getScreenX(), event.getScreenY());
+            event.consume();
+        }
+    }
+
+    /**
+     * Otvorenie samostatného okna s obsahom pamäte RAM.
+     */
+    private void openContentWindow() {
+        if (contentWindow == null) contentWindow = new RAMContentWindow();
+        contentWindow.showContent(memory);
     }
 
     @Override
