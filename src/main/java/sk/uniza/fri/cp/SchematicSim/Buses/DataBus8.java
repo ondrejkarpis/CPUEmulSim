@@ -85,6 +85,7 @@ public class DataBus8 extends BusSymbol {
     private Rectangle line;
     private Circle resizeHandle;
     private Circle resizeTopHandle;
+    private Text title;
     private boolean resizing;
     private boolean resizingTop;
 
@@ -195,6 +196,7 @@ public class DataBus8 extends BusSymbol {
         title.setFont(Font.font(cell * 0.6));
         title.setFill(RAIL_COLOR);
         title.setMouseTransparent(true);
+        this.title = title;
 
         railPane.getChildren().addAll(line, title, resizeHandle, resizeTopHandle);
     }
@@ -410,6 +412,7 @@ public class DataBus8 extends BusSymbol {
         line.setHeight(railHeight(cell));
         resizeHandle.setCenterY(rows * cell - cell / 2.0);
         resizeTopHandle.setCenterY(topRow * cell + cell / 2.0);
+        title.setLayoutY(topRow * cell - cell * 0.15);
     }
 
     // === menu výberu vývodu ===

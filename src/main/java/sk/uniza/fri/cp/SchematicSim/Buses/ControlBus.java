@@ -79,6 +79,7 @@ public class ControlBus extends BusSymbol {
     private Rectangle line;
     private Circle resizeHandle;
     private Circle resizeTopHandle;
+    private Text title;
     private boolean resizing;
     private boolean resizingTop;
 
@@ -182,6 +183,7 @@ public class ControlBus extends BusSymbol {
         title.setFont(Font.font(cell * 0.6));
         title.setFill(RAIL_COLOR);
         title.setMouseTransparent(true);
+        this.title = title;
 
         railPane.getChildren().addAll(line, title, resizeHandle, resizeTopHandle);
     }
@@ -399,6 +401,7 @@ public class ControlBus extends BusSymbol {
         line.setHeight(railHeight(cell));
         resizeHandle.setCenterY(rows * cell - cell / 2.0);
         resizeTopHandle.setCenterY(topRow * cell + cell / 2.0);
+        title.setLayoutY(topRow * cell - cell * 0.15);
     }
 
     // === menu výberu signálu ===
