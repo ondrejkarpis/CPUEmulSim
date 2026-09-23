@@ -59,7 +59,7 @@ public class ControlBus extends BusSymbol {
     // bity riadiacej zbernice (pozri Bus.mapSignal)
     private static final int[] BIT_OF_SIGNAL = {8, 7, 6, 5, 4, 3};
     // ktoré signály sú vstupné (obvod -> CPU) - IT
-    private static final boolean[] INPUT_SIGNAL = {false, false, false, false, false, false};
+    private static final boolean[] INPUT_SIGNAL = {false, false, false, false, false, true};
 
     private static final int RAIL_WIDTH = 2;
     private static final int DEFAULT_ROWS = 7;
