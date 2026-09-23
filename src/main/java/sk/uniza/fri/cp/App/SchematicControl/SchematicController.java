@@ -501,20 +501,6 @@ public class SchematicController {
 
         if (file == null) return false;
 
-        if (!saveAs && currentFile != null && currentFile.getName().equals(file.getName())) {
-            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.setTitle("Potvrdenie");
-            alert.setHeaderText("Naozaj si prajete prepísať súbor " + file.getName() + "?");
-
-            ButtonType btnTypeYes = new ButtonType("Áno");
-            ButtonType btnTypeNo = new ButtonType("Nie");
-            alert.getButtonTypes().clear();
-            alert.getButtonTypes().addAll(btnTypeYes, btnTypeNo);
-
-            Optional<ButtonType> result = alert.showAndWait();
-            if (result.isPresent() && result.get() == btnTypeNo) return false;
-        }
-
         if (SchemeLoader.save(file, this.sheet)) {
             this.sheet.clearChange();
             ((Stage) this.root.getScene().getWindow()).setTitle(WINDOW_TITLE + " - " + file.getName());

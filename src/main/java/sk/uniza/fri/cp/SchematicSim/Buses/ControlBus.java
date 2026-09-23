@@ -72,11 +72,15 @@ public class ControlBus extends BusSymbol {
     private static final double RAIL_THICKNESS = 0.45;
 
     private int rows = DEFAULT_ROWS;
+    /** Riadok, na ktorom začína nakreslená lišta (0 = horný okraj súčiastky). */
+    private int topRow = 0;
 
     private Pane railPane;
     private Rectangle line;
     private Circle resizeHandle;
+    private Circle resizeTopHandle;
     private boolean resizing;
+    private boolean resizingTop;
 
     private List<Pin> pinsRef;
     private final List<TapPoint> taps = new ArrayList<>();
@@ -113,6 +117,9 @@ public class ControlBus extends BusSymbol {
 
     public ControlBus(SchematicSheet sheet) {
         super(sheet);
+        // layout by inak po každom pulze prispôsoboval rozmery resizable railPane pref size
+        // (rozsah jeho children), čo zväčšovalo maxY, keď lišta siaha nad počiatok súčiastky
+        setAutoSizeChildren(false);
         getBus().controlBusProperty().addListener(onControlBusChange);
         initRail();
         syncFromBus();
@@ -145,20 +152,29 @@ public class ControlBus extends BusSymbol {
         double railCenterX = RAIL_WIDTH * cell / 2.0;
         double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
-        line = new Rectangle(railCenterX - thickness / 2.0, cell / 2.0, thickness, rows * cell - cell);
+        line = new Rectangle(railCenterX - thickness / 2.0, topRow * cell + cell / 2.0, thickness, railHeight(cell));
         line.setFill(RAIL_COLOR);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(1);
         line.addEventHandler(MouseEvent.MOUSE_CLICKED, this::handleRailClick);
         line.addEventHandler(MouseEvent.MOUSE_RELEASED, this::handleRailRelease);
 
-        // neviditeľný rukoväť na zmenu dĺžky - cítiť ho je len kurzorom, samotný nie je vidieť
-        resizeHandle = new Circle(railCenterX, rows * cell, cell * 0.35, Color.TRANSPARENT);
+        // neviditeľné rukoväte na zmenu dĺžky - cítiť ich je len kurzorom, samotné nie sú vidieť.
+        // Obidve rukoväte sú vystredené na nakreslené konce čiary, aby sa kurzor menil
+        // presne pri koncoch zbernice a nie pod ňou / nad ňou.
+        resizeHandle = new Circle(railCenterX, rows * cell - cell / 2.0, cell * 0.35, Color.TRANSPARENT);
         resizeHandle.setStroke(Color.TRANSPARENT);
         resizeHandle.setCursor(Cursor.N_RESIZE);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleResizeDragged);
         resizeHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
+
+        resizeTopHandle = new Circle(railCenterX, topRow * cell + cell / 2.0, cell * 0.35, Color.TRANSPARENT);
+        resizeTopHandle.setStroke(Color.TRANSPARENT);
+        resizeTopHandle.setCursor(Cursor.N_RESIZE);
+        resizeTopHandle.addEventFilter(MouseEvent.MOUSE_PRESSED, this::handleResizePressed);
+        resizeTopHandle.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::handleResizeDragged);
+        resizeTopHandle.addEventFilter(MouseEvent.MOUSE_RELEASED, this::handleResizeReleased);
 
         Text title = new Text(getBusLabel());
         title.setLayoutX(railCenterX - cell * 0.55);
@@ -167,7 +183,12 @@ public class ControlBus extends BusSymbol {
         title.setFill(RAIL_COLOR);
         title.setMouseTransparent(true);
 
-        railPane.getChildren().addAll(line, title, resizeHandle);
+        railPane.getChildren().addAll(line, title, resizeHandle, resizeTopHandle);
+    }
+
+    /** Výška nakreslenej čiary v px pre danú bunku (od horného po dolný okraj lišty). */
+    private double railHeight(int cell) {
+        return (rows - topRow) * cell - cell;
     }
 
     /**
@@ -182,7 +203,7 @@ public class ControlBus extends BusSymbol {
     public Pin createTap(int signal, double localY) {
         int cell = getSheet().getGrid().getSizeMin();
         double x = RAIL_WIDTH * cell / 2.0;
-        double y = snap(clamp(localY, cell, rows * cell), cell);
+        double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), cell);
 
         boolean input = INPUT_SIGNAL[signal];
         TapPin pin = new TapPin(this, SIGNAL_NAMES[signal], input ? Pin.Direction.INPUT : Pin.Direction.OUTPUT);
@@ -265,7 +286,7 @@ public class ControlBus extends BusSymbol {
         for (TapPoint tap : taps) {
             usedRows.add((int) Math.round(tap.pin.getLayoutY() / cell));
         }
-        int nextFreeRow = 1;
+        int nextFreeRow = topRow + 1;
         for (int i = 0; i < count; i++) {
             if (hasTap(i)) continue;
             while (usedRows.contains(nextFreeRow)) {
@@ -335,6 +356,7 @@ public class ControlBus extends BusSymbol {
     private void handleResizePressed(MouseEvent event) {
         if (!event.isPrimaryButtonDown()) return;
         resizing = true;
+        resizingTop = event.getSource() == resizeTopHandle;
         event.consume();
     }
 
@@ -342,12 +364,23 @@ public class ControlBus extends BusSymbol {
         if (!resizing) return;
         int cell = getSheet().getGrid().getSizeMin();
         double localY = toLocalY(event);
-        int newRows = clamp((int) Math.round(localY / cell), Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
-        if (newRows != rows) {
-            rows = newRows;
-            line.setHeight(rows * cell - cell);
-            resizeHandle.setCenterY(rows * cell);
-            refreshSelectionShape();
+        if (resizingTop) {
+            int maxTopRow = Math.min(rows - MIN_ROWS, minTopRowForTaps());
+            int newTopRow = clamp((int) Math.round((localY - cell / 2.0) / cell), -MAX_ROWS, maxTopRow);
+            if (newTopRow != topRow) {
+                topRow = newTopRow;
+                updateRailGeometry();
+                refreshSelectionShape();
+                getSheet().markChanged();
+            }
+        } else {
+            int newRows = clamp((int) Math.round(localY / cell), Math.max(topRow + MIN_ROWS, minRowsForTaps()), MAX_ROWS);
+            if (newRows != rows) {
+                rows = newRows;
+                updateRailGeometry();
+                refreshSelectionShape();
+                getSheet().markChanged();
+            }
         }
         event.consume();
     }
@@ -355,7 +388,17 @@ public class ControlBus extends BusSymbol {
     private void handleResizeReleased(MouseEvent event) {
         if (!resizing) return;
         resizing = false;
+        resizingTop = false;
         event.consume();
+    }
+
+    /** Premietnutie topRow/rows do geometrie čiary a rukovätí. */
+    private void updateRailGeometry() {
+        int cell = getSheet().getGrid().getSizeMin();
+        line.setY(topRow * cell + cell / 2.0);
+        line.setHeight(railHeight(cell));
+        resizeHandle.setCenterY(rows * cell - cell / 2.0);
+        resizeTopHandle.setCenterY(topRow * cell + cell / 2.0);
     }
 
     // === menu výberu signálu ===
@@ -474,15 +517,32 @@ public class ControlBus extends BusSymbol {
     }
 
     /**
-     * Nastavenie počtu riadkov (dĺžky) lištovej zbernice. Ekvivalent potiahnutia rukoväťa.
+     * Nastavenie počtu riadkov (dĺžky) lištovej zbernice. Ekvivalent potiahnutia spodného rukoväťa.
      */
     public void setRows(int newRows) {
         int cell = getSheet().getGrid().getSizeMin();
-        int clamped = clamp(newRows, Math.max(MIN_ROWS, minRowsForTaps()), MAX_ROWS);
+        int clamped = clamp(newRows, Math.max(topRow + MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         rows = clamped;
-        line.setHeight(clamped * cell - cell);
-        resizeHandle.setCenterY(clamped * cell);
+        updateRailGeometry();
         refreshSelectionShape();
+    }
+
+    /** Nastavenie horného riadku (posun horného konca lišty). */
+    public void setTopRow(int newTopRow) {
+        int cell = getSheet().getGrid().getSizeMin();
+        int maxTopRow = Math.min(rows - MIN_ROWS, minTopRowForTaps());
+        int clamped = clamp(newTopRow, -MAX_ROWS, maxTopRow);
+        topRow = clamped;
+        updateRailGeometry();
+        refreshSelectionShape();
+    }
+
+    /**
+     * Priame nastavenie horného riadku bez geometrických prepočtov - použité pri načítaní,
+     * keď ešte nie je nastavený počet riadkov (rows) a clamp by ohýbal hodnotu.
+     */
+    private void setTopRowInternal(int newTopRow) {
+        topRow = newTopRow;
     }
 
     /**
@@ -498,10 +558,26 @@ public class ControlBus extends BusSymbol {
         return maxRow + 1;
     }
 
+    /**
+     * Najväčší možný horný riadok tak, aby bola lišta stále nad všetkými vývodmi
+     * (o rezervný riadok nižšie, aby horný koniec nekryl najvyšší vývod).
+     * Bez vývodov neobmedzuje (vracia Integer.MAX_VALUE, clamp použije rows - MIN_ROWS).
+     */
+    private int minTopRowForTaps() {
+        if (taps.isEmpty()) return Integer.MAX_VALUE;
+        int cell = getSheet().getGrid().getSizeMin();
+        int minRow = Integer.MAX_VALUE;
+        for (TapPoint tap : taps) {
+            minRow = Math.min(minRow, (int) Math.round(tap.pin.getLayoutY() / cell));
+        }
+        return minRow - 1;
+    }
+
     @Override
     public Map<String, String> saveProperties() {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("rows", Integer.toString(rows));
+        properties.put("topRow", Integer.toString(topRow));
 
         StringBuilder tapsValue = new StringBuilder();
         for (TapPoint tap : taps) {
@@ -514,6 +590,14 @@ public class ControlBus extends BusSymbol {
 
     @Override
     public void loadProperties(Map<String, String> properties) {
+        String topRowValue = properties.get("topRow");
+        if (topRowValue != null) {
+            try {
+                setTopRowInternal(Integer.parseInt(topRowValue.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
         String rowsValue = properties.get("rows");
         if (rowsValue != null) {
             try {

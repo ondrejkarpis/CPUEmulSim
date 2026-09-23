@@ -63,8 +63,8 @@ public abstract class Item extends Movable {
         this.selectionShape.setStroke(Color.BLACK);
         this.selectionShape.setStrokeLineCap(StrokeLineCap.ROUND);
         this.selectionShape.setOpacity(0.8);
-        this.selectionShape.setLayoutX(-offset);
-        this.selectionShape.setLayoutY(-offset);
+        this.selectionShape.setLayoutX(bounds.getMinX() - offset);
+        this.selectionShape.setLayoutY(bounds.getMinY() - offset);
 
         this.getChildren().add(this.selectionShape);
     }
@@ -86,10 +86,11 @@ public abstract class Item extends Movable {
         boolean removed = getChildren().remove(selectionShape);
         if (!removed) return;
         Bounds bounds = getBoundsInLocal();
-        selectionShape.setLayoutX(-offset);
-        selectionShape.setLayoutY(-offset);
+        selectionShape.setLayoutX(bounds.getMinX() - offset);
+        selectionShape.setLayoutY(bounds.getMinY() - offset);
         selectionShape.setWidth(bounds.getWidth() + 2 * offset);
         selectionShape.setHeight(bounds.getHeight() + 2 * offset);
+
         getChildren().add(selectionShape);
     }
 }

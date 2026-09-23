@@ -127,17 +127,11 @@ public class SchematicSheet extends ScrollPane {
 
     private final EventHandler<MouseDragEvent> onMouseDragReleasedHandle = event -> {
         if (addingItem != null) {
-            // kontrola voľnosti mriežky - nahrádza pôvodnú kolíznu detekciu so soketmi breadboardu
-            if (!occupancy.isFree(addingItem.getGridPosX(), addingItem.getGridPosY(),
-                    addingItem.getGridWidth(), addingItem.getGridHeight())) {
-                addingItem.delete();
-            } else {
-                occupancy.occupy(addingItem);
-                Event.fireEvent(addingItem, new MouseEvent(MouseEvent.MOUSE_RELEASED, event.getSceneX(), event.getSceneY(),
-                        event.getScreenX(), event.getScreenY(), MouseButton.PRIMARY, 1, true,
-                        true, true, true, true, true,
-                        true, true, true, true, null));
-            }
+            occupancy.occupy(addingItem);
+            Event.fireEvent(addingItem, new MouseEvent(MouseEvent.MOUSE_RELEASED, event.getSceneX(), event.getSceneY(),
+                    event.getScreenX(), event.getScreenY(), MouseButton.PRIMARY, 1, true,
+                    true, true, true, true, true,
+                    true, true, true, true, null));
             addingItem = null;
         }
     };
@@ -487,6 +481,14 @@ public class SchematicSheet extends ScrollPane {
 
     public boolean hasChanged() {
         return hasChanged;
+    }
+
+    /**
+     * Označí schému ako zmenenú (úspešná zmena uskutočnená priamo na súčiastke,
+     * napr. zmena dĺžky zbernice).
+     */
+    public void markChanged() {
+        hasChanged = true;
     }
 
     public void clearChange() {
