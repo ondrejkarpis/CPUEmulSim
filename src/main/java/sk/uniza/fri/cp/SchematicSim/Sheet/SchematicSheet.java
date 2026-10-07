@@ -93,6 +93,13 @@ public class SchematicSheet extends ScrollPane {
     private final SimpleBooleanProperty debugWires = new SimpleBooleanProperty(false);
 
     private static final double SCALE_DELTA = 1.1;
+
+    /**
+     * Vzdialenosť (v bodoch schémy) medzi pustením konca vodiča a najbližším segmentom,
+     * pri ktorej ešte vznikne spoj, ak pick netrafil samotný vodič. Pri priblížení sa
+     * prepočíta tak, aby bol dosah približne rovnaký na obrazovke.
+     */
+    private static final double WIRE_DROP_TOLERANCE = 12;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
     private final Group contentGroup;
 
@@ -333,9 +340,10 @@ public class SchematicSheet extends ScrollPane {
                     // pickResult vráti najhlbší hite (cierka spájača / polyline segmentu),
                     // preto prechádzame rodičovacou reťazou až na WireJunction/WireSegment.
                     // Koniec odbočky (WireEnd) s napojeným spájačom sa tiež berie ako spájač.
+                    Node picked = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
                     WireSegment segmentTarget = null;
                     WireJunction junctionTarget = null;
-                    Node target = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+                    Node target = picked;
                     while (target != null && segmentTarget == null && junctionTarget == null) {
                         if (target instanceof WireSegment) {
                             segmentTarget = (WireSegment) target;
@@ -345,6 +353,16 @@ public class SchematicSheet extends ScrollPane {
                             junctionTarget = ((WireEnd) target).getJunction();
                         }
                         target = target.getParent();
+                    }
+
+                    Point2D sheetXY = layersManager.getLayer("background")
+                            .sceneToLocal(event.getSceneX(), event.getSceneY());
+
+                    // Tenký segment sa pri pustení ľahko minie (pick zasiahne iba ťahkú čiaru),
+                    // preto ak pick netrafil žiadny vodič/spájač a myš je na prázdnej ploche,
+                    // hľadáme najbližší segment v okolí pustenia s toleranciou podľa priblíženia.
+                    if (segmentTarget == null && junctionTarget == null && isOnWireDropSurface(picked)) {
+                        segmentTarget = findWireSegmentNear(sheetXY.getX(), sheetXY.getY(), inProgress);
                     }
 
                     if (segmentTarget != null) {
@@ -359,8 +377,6 @@ public class SchematicSheet extends ScrollPane {
                             return;
                         }
 
-                        Point2D sheetXY = layersManager.getLayer("background")
-                                .sceneToLocal(event.getSceneX(), event.getSceneY());
                         WireJunction junction = connectToWireAt(targetWire, sheetXY.getX(), sheetXY.getY());
                         if (junction != null) {
                             if (junction == inProgress.getStartJunction()) {
@@ -407,6 +423,52 @@ public class SchematicSheet extends ScrollPane {
         inProgress.setMouseTransparent(false);
         inProgress.setOpacity(1);
         Pin.finishInProgressWire();
+    }
+
+    /**
+     * Či bol pick na prázdnej ploche schémy (pozadie) - len vtedy môže byť pustenie
+     * konca vodiča v okolí interpretované ako pripojenie na neďaleký vodič. Spustenie
+     * na pine, súčiastke, spájači či vodiči nesmie fallback zachytiť - tam majú
+     * prednosť vlastné handlery (pripojenie na pin, menu zbernice atď.).
+     */
+    private boolean isOnWireDropSurface(Node picked) {
+        Node node = picked;
+        while (node != null) {
+            if (node instanceof Pin || node instanceof Joint || node instanceof GateSymbol || node instanceof Wire) {
+                return false;
+            }
+            if (node == layersManager.getLayer("background")) return true;
+            node = node.getParent();
+        }
+        return false;
+    }
+
+    /**
+     * Najbližší segment ľubovoľného vodiča (okrem {@code exclude}) vo vzdialenosti
+     * najviac {@link #WIRE_DROP_TOLERANCE} px od bodu. Tolerancia sa pri priblížení
+     * škáluje, aby sa tenký vodič ľahšie trafili aj pri zmenšenej ploche.
+     *
+     * @return Segment najbližšieho vodiča, alebo null ak je bod príliš ďaleko.
+     */
+    private WireSegment findWireSegmentNear(double sheetX, double sheetY, Wire exclude) {
+        double scale = Math.max(getAppliedScale(), 0.5);
+        double tolerance = Math.min(
+                Math.max(WIRE_DROP_TOLERANCE / scale, WIRE_DROP_TOLERANCE),
+                gridSystem.getSizeMin());
+        Point2D point = new Point2D(sheetX, sheetY);
+
+        Wire bestWire = null;
+        double bestDist = Double.MAX_VALUE;
+        for (Wire wire : layersManager.getWires()) {
+            if (wire == exclude) continue;
+            double dist = wire.distanceToNearestSegment(point);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestWire = wire;
+            }
+        }
+        if (bestWire == null || bestDist > tolerance) return null;
+        return bestWire.findSegmentNear(point, tolerance);
     }
 
     /**

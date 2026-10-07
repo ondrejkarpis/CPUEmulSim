@@ -484,6 +484,14 @@ public class Wire extends HighlightGroup {
      * Nájde segment vodiča, ktorý je najbližšie k danému bodu.
      */
     private WireSegment findSegmentAt(Point2D position) {
+        return findSegmentAt(position, 10);
+    }
+
+    /**
+     * Nájde segment vodiča, ktorý je najbližšie k danému bodu, ak je vzdialenosť
+     * menšia než {@code tolerance}.
+     */
+    private WireSegment findSegmentAt(Point2D position, double tolerance) {
         double bestDist = Double.MAX_VALUE;
         WireSegment best = null;
 
@@ -502,7 +510,7 @@ public class Wire extends HighlightGroup {
             }
         }
 
-        if (best != null && bestDist > 10) return null;
+        if (best != null && bestDist > tolerance) return null;
         return best;
     }
 
@@ -511,6 +519,31 @@ public class Wire extends HighlightGroup {
      */
     public WireSegment findSegmentNear(Point2D position) {
         return findSegmentAt(position);
+    }
+
+    /**
+     * Najbližší segment k bodu v rámci vlastnej tolerancie - používa sa pri pustení
+     * konca iného vodiča do okolia tohto vodiča (tenký segment sa ľahko minie pickom).
+     */
+    public WireSegment findSegmentNear(Point2D position, double tolerance) {
+        return findSegmentAt(position, tolerance);
+    }
+
+    /**
+     * Najmenšia vzdialenosť od bodu k trase tohto vodiča (bez ohľadu na toleranciu) -
+     * používa sa na výber najbližšieho vodiča pri pustení konca odbočky v okolí.
+     */
+    public double distanceToNearestSegment(Point2D position) {
+        double best = Double.MAX_VALUE;
+        for (WireSegment seg : this.segments) {
+            List<Double> points = seg.getRoutedPoints();
+            for (int i = 0; i < points.size() - 2; i += 2) {
+                double dist = distanceToSegment(position.getX(), position.getY(),
+                        points.get(i), points.get(i + 1), points.get(i + 2), points.get(i + 3));
+                if (dist < best) best = dist;
+            }
+        }
+        return best;
     }
 
     /**
