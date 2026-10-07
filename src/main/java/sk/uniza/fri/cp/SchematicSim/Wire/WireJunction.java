@@ -46,7 +46,7 @@ public class WireJunction extends Joint implements Connectable {
         super(sheet, wire);
 
         GridSystem grid = getSheet().getGrid();
-        double r = grid.getSizeMin() / 3.7;
+        double r = grid.getSizeMin() / 7.0;
         this.baseRadius = r;
 
         this.junctionDot = new Circle(0, 0, r, FILL_COLOR);

@@ -1487,7 +1487,7 @@ private void registerEvents() {
             javafx.scene.shape.Polyline highlight = new javafx.scene.shape.Polyline();
             highlight.getPoints().setAll(segment.getRoutedPoints());
             for (double value : STROKE_DASH_ARRAY) highlight.getStrokeDashArray().add(value);
-            highlight.setStrokeWidth(1.5);
+            highlight.setStrokeWidth(1);
             highlight.setStroke(this.getColor().invert());
             highlight.setStrokeLineCap(StrokeLineCap.ROUND);
             highlight.setOpacity(opacity);

@@ -66,7 +66,7 @@ public class NotGate extends GateSymbol {
 
         Rectangle body = new Rectangle(w - 2 * bubble, h, Color.WHITESMOKE);
         body.setStroke(Color.BLACK);
-        body.setStrokeWidth(1.5);
+        body.setStrokeWidth(3);
 
         Text label = new Text("1");
         label.setLayoutX((w - 2 * bubble) / 2 - 4);
@@ -75,7 +75,7 @@ public class NotGate extends GateSymbol {
         Circle negationBubble = new Circle(w - bubble, h / 2.0, bubble);
         negationBubble.setFill(Color.WHITESMOKE);
         negationBubble.setStroke(Color.BLACK);
-        negationBubble.setStrokeWidth(1.5);
+        negationBubble.setStrokeWidth(3);
 
         return new Pane(body, label, negationBubble);
     }

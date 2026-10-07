@@ -99,7 +99,7 @@ public class Led extends GateSymbol {
 
         light = new Circle(w / 2.0, h / 2.0, cell * 0.55, LED_OFF);
         light.setStroke(Color.BLACK);
-        light.setStrokeWidth(1.5);
+        light.setStrokeWidth(3);
         // menu sa otvára na pravom tlačidle myši; MOUSE_PRESSED je spoľahlivejší ako
         // CONTEXT_MENU_REQUESTED (ten sa negeneruje, ak pravý stlač počas cesty niekto skonzumuje)
         light.setOnMousePressed(event -> {

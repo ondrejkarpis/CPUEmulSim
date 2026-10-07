@@ -86,7 +86,7 @@ public class Input extends GateSymbol {
         button = new Rectangle(w / 2.0 - size / 2.0, h / 2.0 - size / 2.0, size, size);
         button.setFill(Color.WHITE);
         button.setStroke(Color.BLACK);
-        button.setStrokeWidth(1.5);
+        button.setStrokeWidth(2);
         button.setOnMouseClicked(event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
                 handleToggle();

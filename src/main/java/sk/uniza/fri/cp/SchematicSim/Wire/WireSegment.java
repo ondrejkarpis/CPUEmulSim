@@ -43,7 +43,7 @@ public class WireSegment extends Group {
         this.startJoint.connectWireSegment(this);
         this.endJoint.connectWireSegment(this);
 
-        this.line.setStrokeWidth(6);
+        this.line.setStrokeWidth(2);
         this.line.setFill(null);
         this.line.setStroke(wire.getCurrentColor());
         this.line.setOpacity(1);

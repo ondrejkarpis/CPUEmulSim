@@ -97,7 +97,7 @@ public class Decoder38 extends GateSymbol {
         int cell = getSheet().getGrid().getSizeMin();
         Rectangle body = new Rectangle(GRID_WIDTH * cell, GRID_HEIGHT * cell, Color.WHITE);
         body.setStroke(Color.BLACK);
-        body.setStrokeWidth(1.5);
+        body.setStrokeWidth(3);
 
         Pane pane = new Pane();
         pane.getChildren().add(body);

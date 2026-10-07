@@ -164,7 +164,7 @@ public abstract class Pin extends Group implements Connectable {
         this.potential.setType(defaultTypeFor(direction));
 
         int gridPx = owner.getSheet().getGrid().getSizeMin();
-        double r = gridPx * 3.0 / 16.0;
+        double r = gridPx / 8.0;
 
         Rectangle hitArea = new Rectangle(gridPx, gridPx);
         hitArea.setOpacity(0);

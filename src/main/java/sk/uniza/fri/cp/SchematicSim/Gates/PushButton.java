@@ -103,14 +103,14 @@ public class PushButton extends GateSymbol {
         Rectangle body = new Rectangle(w, h);
         body.setFill(Color.WHITESMOKE);
         body.setStroke(Color.GRAY);
-        body.setStrokeWidth(1.5);
+        body.setStrokeWidth(3);
 
         // otlačené tlačidlo; ľavým tlačidlom sa stláča - pri zapnutom Toggle sa každé
         // stlačenie prepne (trvalo), pri vypnutom je stlačené len počas držania myši.
         // Pravým tlačidlom sa otvorí kontextové menu s položkou Toggle.
         plunger = new Circle(w / 2.0, h / 2.0, cell * 0.6, Color.BLACK);
         plunger.setStroke(Color.WHITE);
-        plunger.setStrokeWidth(1.5);
+        plunger.setStrokeWidth(3);
         plunger.setOnMousePressed(event -> {
             if (event.getButton() == MouseButton.PRIMARY) {
                 if (toggle) {

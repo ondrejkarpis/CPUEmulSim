@@ -192,7 +192,7 @@ public class SevenSegmentDisplay extends GateSymbol {
         Rectangle frame = new Rectangle(0, 0, cw, ch);
         frame.setFill(Color.WHITE);
         frame.setStroke(Color.BLACK);
-        frame.setStrokeWidth(1.5);
+        frame.setStrokeWidth(3);
 
         // posun cifry tak, aby bola v rámiku symetricky vycentrovaná (stred cifry = stred rámika)
         double shift = 0.7 * c;

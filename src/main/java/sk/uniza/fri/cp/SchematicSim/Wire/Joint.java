@@ -50,7 +50,7 @@ public class Joint extends Movable {
         boundingBox.setLayoutX(-grid.getSizeX() / 2.0);
         boundingBox.setLayoutY(-grid.getSizeY() / 2.0);
 
-        this.radius = grid.getSizeMin() / 3.7;
+        this.radius = grid.getSizeMin() / 7.0;
         Group graphic = generateJointGraphic(radius);
 
         this.getChildren().addAll(boundingBox, graphic);

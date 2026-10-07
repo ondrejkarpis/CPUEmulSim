@@ -52,7 +52,7 @@ public abstract class BusSymbol extends GateSymbol {
         int cell = getSheet().getGrid().getSizeMin();
         Rectangle body = new Rectangle(getGridWidth() * cell, getGridHeight() * cell, Color.LIGHTYELLOW);
         body.setStroke(Color.DARKGOLDENROD);
-        body.setStrokeWidth(1.5);
+        body.setStrokeWidth(3);
 
         Text title = new Text(getBusLabel());
         title.setLayoutX(cell * 1.2);

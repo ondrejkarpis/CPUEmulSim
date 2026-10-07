@@ -100,7 +100,7 @@ public abstract class MultiInputGate extends GateSymbol {
 
         Rectangle body = new Rectangle((negated() ? w - 2 * bubble : w), h, Color.WHITESMOKE);
         body.setStroke(Color.BLACK);
-        body.setStrokeWidth(1.5);
+        body.setStrokeWidth(3);
 
         double bubbleY = outputRow() * cell;
 
@@ -113,7 +113,7 @@ public abstract class MultiInputGate extends GateSymbol {
             Circle negationBubble = new Circle(w - bubble, bubbleY, bubble);
             negationBubble.setFill(Color.WHITESMOKE);
             negationBubble.setStroke(Color.BLACK);
-            negationBubble.setStrokeWidth(1.5);
+            negationBubble.setStrokeWidth(3);
             pane.getChildren().add(negationBubble);
         }
         return pane;

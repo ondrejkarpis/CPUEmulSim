@@ -147,11 +147,11 @@ public class MatrixKeyboard extends GateSymbol {
                 Rectangle keyBody = new Rectangle(bx, by, KEY_GRID * cell, KEY_GRID * cell);
                 keyBody.setFill(Color.WHITESMOKE);
                 keyBody.setStroke(Color.GRAY);
-                keyBody.setStrokeWidth(1.5);
+                keyBody.setStrokeWidth(3);
 
                 Circle key = new Circle(bx + cell, by + cell, cell * 0.6, Color.BLACK);
                 key.setStroke(Color.WHITE);
-                key.setStrokeWidth(1.5);
+                key.setStrokeWidth(3);
                 final int r = row;
                 final int c = col;
                 key.setOnMousePressed(event -> {

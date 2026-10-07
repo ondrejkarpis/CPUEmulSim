@@ -83,7 +83,7 @@ public class BusBuffer extends GateSymbol {
                 w, h / 2.0);
         triangle.setFill(Color.WHITESMOKE);
         triangle.setStroke(Color.BLACK);
-        triangle.setStrokeWidth(1.5);
+        triangle.setStrokeWidth(3);
 
         // negačný krúžok na riadiacom vstupe (G_ - aktívny v log. 0). Stred krúžku je
         // v bode (1, 1/4) - polomer cell/4 siaha hore presne k mriežke y=0, kde leží pripojovací
@@ -91,7 +91,7 @@ public class BusBuffer extends GateSymbol {
         Circle gBubble = new Circle(cell, cell / 4.0, bubble);
         gBubble.setFill(Color.WHITESMOKE);
         gBubble.setStroke(Color.BLACK);
-        gBubble.setStrokeWidth(1.5);
+        gBubble.setStrokeWidth(3);
 
         return new Pane(triangle, gBubble);
     }
