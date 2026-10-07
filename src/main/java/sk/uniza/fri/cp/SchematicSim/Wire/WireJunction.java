@@ -202,13 +202,25 @@ public class WireJunction extends Joint implements Connectable {
      * pre staré súbory ostáva prechod cez segmenty.
      */
     public Pin findConnectedPin() {
-        return findConnectedPin(new HashSet<>());
+        return findConnectedPin(null);
     }
 
-    private Pin findConnectedPin(Set<WireJunction> visited) {
+    /**
+     * Ako {@link #findConnectedPin()}, ale neprechádza cez konce vodiča {@code avoid}.
+     * Používa {@link Wire#updatePotential()} pri hľadaní protiľahlého pinu konca: spájač
+     * vzniknutý rozdelením vodiča má ako prvý koniec práve jeho vlastný koniec, takže
+     * bez obchádzky by vodič dostal potenciál (pin, pin) - pri pasívnom pine (LED, vstup)
+     * by mal typ IN a hodnotu NC, čo sa prejaví trvalo sivou debug-farbou vodiča.
+     */
+    public Pin findConnectedPin(Wire avoid) {
+        return findConnectedPin(new HashSet<>(), avoid);
+    }
+
+    private Pin findConnectedPin(Set<WireJunction> visited, Wire avoid) {
         if (!visited.add(this)) return null;
 
         for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
+            if (avoid != null && end.getWire() == avoid) continue;
             Pin direct = end.getPin();
             if (direct != null) return direct;
 
@@ -220,7 +232,7 @@ public class WireJunction extends Joint implements Connectable {
                 if (pin != null) return pin;
                 WireJunction otherJunction = other.getJunction();
                 if (otherJunction != null && otherJunction != this) {
-                    Pin found = otherJunction.findConnectedPin(visited);
+                    Pin found = otherJunction.findConnectedPin(visited, avoid);
                     if (found != null) return found;
                 }
             }
@@ -228,28 +240,45 @@ public class WireJunction extends Joint implements Connectable {
 
         // legacy: prechod cez segmenty (starý model s vnútorným spájačom na kmeňovom vodiči)
         if (!visited.isEmpty()) {
-            Pin legacy = findPinThroughSegments();
+            Pin legacy = findPinThroughSegments(avoid);
             if (legacy != null) return legacy;
         }
         return null;
     }
 
-    private Pin findPinThroughSegments() {
-        Pin pin = findPinThroughSegments(wireSegments[0], this);
+    private Pin findPinThroughSegments(Wire avoid) {
+        Pin pin = findPinThroughSegments(wireSegments[0], this, avoid);
         if (pin != null) return pin;
-        return findPinThroughSegments(wireSegments[1], this);
+        return findPinThroughSegments(wireSegments[1], this, avoid);
     }
 
-    private static Pin findPinThroughSegments(WireSegment seg, Joint visited) {
+    private static Pin findPinThroughSegments(WireSegment seg, Joint visited, Wire avoid) {
         if (seg == null) return null;
+        if (avoid != null && seg.getWire() == avoid) return null;
         Joint other = seg.getOtherJoint(visited);
         if (other instanceof WireEnd) {
             return ((WireEnd) other).getPin();
         }
         if (other instanceof WireJunction) {
-            return ((WireJunction) other).findPinThroughSegments(other.getPrimaryWireSegment(), other);
+            return ((WireJunction) other).findPinThroughSegments(other.getPrimaryWireSegment(), other, avoid);
         }
         return null;
+    }
+
+    /**
+     * Prepočíta potenciály vodičov momentálne napojených na tento spájač (obnoví celú
+     * sieť okolo prvého z nich - {@link Wire#updatePotentialNetwork()} prejde všetkých
+     * susedov cez spájače). Volá sa po odpojení konca, keď si zostávajúce vodiče musia
+     * prepočítať cestu k pinom, ktorá viedla cez odpojený koniec.
+     */
+    void refreshConnectedWires() {
+        for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
+            Wire wire = end.getWire();
+            if (wire != null) {
+                wire.updatePotentialNetwork();
+                return;
+            }
+        }
     }
 
     @Override

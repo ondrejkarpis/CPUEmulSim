@@ -236,6 +236,21 @@ public class Potential {
         }
     }
 
+    /**
+     * Tiché odpojenie potenciálu od predkov a potomkov BEZ kaskádneho prepočtu
+     * potomkov. Používa sa pri hromadnej obnove celej siete (Wire.updatePotentialNetwork):
+     * kaskáda by počas búrania reťaze prepájala zvyšné potenciály v náhodnom poradí
+     * podľa toho, kto sa práve odpojoval. Odpojený potenciál sa okamžite zahodí.
+     */
+    public synchronized void detach() {
+        if (this.parent1 != null) this.parent1.child = null;
+        if (this.parent2 != null) this.parent2.child = null;
+        this.parent1 = null;
+        this.parent2 = null;
+        this.child = null;
+        this.unhighlightShortCircuitNodes();
+    }
+
     private synchronized void updateType() {
         PinType type1 = PinType.NC;
         PinType type2 = PinType.NC;

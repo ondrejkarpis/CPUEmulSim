@@ -19,6 +19,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Shape;
 import javafx.scene.shape.StrokeLineCap;
 import sk.uniza.fri.cp.SchematicSim.Connectable;
+import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.HighlightGroup;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
@@ -29,8 +30,13 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Vodič spájajúci piny súčiastok. Vytvára medzi nimi potenciál. Nahrádza
@@ -1116,7 +1122,7 @@ public class Wire extends HighlightGroup {
         destroyJunction(junction);
 
         Wire mergedWire = buildWireFromRoute(sheet, targetA, targetB, merged, color);
-        mergedWire.updatePotential();
+        mergedWire.updatePotentialNetwork();
     }
 
     /**
@@ -1152,7 +1158,7 @@ public class Wire extends HighlightGroup {
         destroyJunction(h2);
 
         Wire mergedWire = buildWireFromRoute(sheet, targetA, targetB, merged, color);
-        mergedWire.updatePotential();
+        mergedWire.updatePotentialNetwork();
     }
 
     private static WireEnd firstEndAt(WireJunction junction) {
@@ -1400,25 +1406,32 @@ private void registerEvents() {
      * Podporuje pripojenie cez spájače (WireJunction) - nájde pin aj cez reťaz zlomov.
      */
     void updatePotential() {
+        Pin start = null;
+        Pin end = null;
+        if (this.ends[0] != null && this.ends[1] != null) {
+            start = getEndPin(this.ends[0]);
+            end = getEndPin(this.ends[1]);
+        }
+        placePotential(start, end);
+    }
+
+    /**
+     * Odpojí starý a vytvorí nový potenciál tohto vodiča medzi danými piny.
+     */
+    private void placePotential(Pin start, Pin end) {
         if (this.potential != null) {
             this.potential.removeValueListener(this.debugColorListener);
-            this.potential.delete();
+            this.potential.detach();
             this.potential = null;
         }
 
-        Pin toUpdate;
+        if (start != null && end != null) {
+            this.potential = new Potential(start, end);
+            if (this.debugColored) this.potential.addValueListener(this.debugColorListener);
+        }
+
         if (this.ends[0] != null && this.ends[1] != null) {
-            Pin start = getEndPin(this.ends[0]);
-            Pin end = getEndPin(this.ends[1]);
-
-            if (start != null && end != null) {
-                this.potential = new Potential(start, end);
-                if (this.debugColored) this.potential.addValueListener(this.debugColorListener);
-                toUpdate = start;
-            } else {
-                toUpdate = start != null ? start : end;
-            }
-
+            Pin toUpdate = start != null ? start : end;
             if (toUpdate != null && getSheet().simRunningProperty().getValue()) {
                 getSheet().addEvent(new SheetEvent(toUpdate));
             }
@@ -1427,11 +1440,109 @@ private void registerEvents() {
     }
 
     /**
-     * Nájde pin, na ktorý je koniec vodiča napojený (priamo alebo cez spájač).
+     * Prepočíta potenciály všetkých vodičov v elektrickej sieti okolo tohto vodiča
+     * (cez spájače). Volá sa po každej zmene topológie (pripojenie/odpojenie konca,
+     * rozdelenie vodiča spájačom).
+     * <p>
+     * Obnova prebieha v dvoch fázach: najprv sa vyresolve-ujú piny všetkých vodičov
+     * a ticho odpoja ich staré potenciály (bez kaskády - inak by sa reťaze počas
+     * búrania prepojovali v náhodnom poradí), potom sa nové potenciály stavajú rastom
+     * OD BUDIČOV: ako prvé vodiče dotýkajúce sa výstupných pinov, ďalej cez zdieľané
+     * piny. Každý ďalší vodič sa tak naviaže na už postavený (OUT-ový) chvost reťaze
+     * namiesto dvoch neobsadených listov, z ktorých by dostal typ IN a hodnotu NC
+     * (trvalo sivú debug-farbu). Poradie konečných vodičov tak už nehrá úlohu.
      */
-    private static Pin getEndPin(WireEnd end) {
+    void updatePotentialNetwork() {
+        // 1) zbierka vodičov siete cez spájače (BFS)
+        Set<Wire> visited = new LinkedHashSet<>();
+        LinkedList<Wire> queue = new LinkedList<>();
+        visited.add(this);
+        queue.add(this);
+        while (!queue.isEmpty()) {
+            Wire wire = queue.poll();
+            for (WireEnd end : wire.ends) {
+                if (end == null) continue; // počas konštruktora ešte vytvorený nie je
+                WireJunction junction = end.getJunction();
+                if (junction == null) continue;
+                for (WireEnd other : junction.getConnectedEnds()) {
+                    Wire next = other.getWire();
+                    if (next != null && visited.add(next)) queue.add(next);
+                }
+            }
+        }
+
+        // 2) resolve protiľahlých pinov všetkých vodičov (čistý dotaz, bez zmeny)
+        Map<Wire, Pin[]> resolved = new LinkedHashMap<>();
+        for (Wire w : visited) {
+            Pin s = (w.ends[0] != null) ? w.getEndPin(w.ends[0]) : null;
+            Pin e = (w.ends[1] != null) ? w.getEndPin(w.ends[1]) : null;
+            resolved.put(w, new Pin[]{s, e});
+        }
+
+        // 3) tiché odpojenie starých potenciálov - žiadna kaskáda, reťaze sa zboria
+        //    naraz a listy pinov ostanú prázdne pre novú stavbu
+        for (Wire w : visited) {
+            if (w.potential != null) {
+                w.potential.removeValueListener(w.debugColorListener);
+                w.potential.detach();
+                w.potential = null;
+            }
+        }
+
+        // 4) index pin -> vodiče (pre rast cez zdieľané piny)
+        Map<Pin, List<Wire>> byPin = new HashMap<>();
+        for (Map.Entry<Wire, Pin[]> entry : resolved.entrySet()) {
+            for (Pin p : entry.getValue()) {
+                if (p == null) continue;
+                byPin.computeIfAbsent(p, k -> new ArrayList<>()).add(entry.getKey());
+            }
+        }
+
+        // 5) rast od budičov: prvé vodiče dotýkajúce sa výstupných pinov, potom
+        //    šírenie cez zdieľané piny; až nakoniec zvyšky bez budiča
+        Set<Wire> placed = new LinkedHashSet<>();
+        LinkedList<Wire> placeQueue = new LinkedList<>();
+        for (Wire w : visited) {
+            if (touchesDriver(resolved.get(w)) && placed.add(w)) placeQueue.add(w);
+        }
+        while (!placeQueue.isEmpty()) {
+            Wire w = placeQueue.poll();
+            Pin[] pins = resolved.get(w);
+            w.placePotential(pins[0], pins[1]);
+            for (Pin p : pins) {
+                if (p == null) continue;
+                for (Wire neighbor : byPin.get(p)) {
+                    if (placed.add(neighbor)) placeQueue.add(neighbor);
+                }
+            }
+        }
+        for (Wire w : visited) {
+            if (placed.add(w)) {
+                Pin[] pins = resolved.get(w);
+                w.placePotential(pins[0], pins[1]);
+            }
+        }
+    }
+
+    /** Či niektorý z pinov vodiča je výstupný (budič) - od neho sa stavia reťaz. */
+    private static boolean touchesDriver(Pin[] pins) {
+        for (Pin p : pins) {
+            if (p == null) continue;
+            PinType type = p.getOwnedPotential().getType();
+            if (type != null && type != PinType.IN && type != PinType.NC) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Nájde pin, na ktorý je koniec vodiča napojený (priamo alebo cez spájač).
+     * Spájač sa prechádza BEZ vodiča {@code this} - inak by vodič práve napojený na
+     * novovytvorený spájač našiel ako prvý sám seba (spájač ho má vo svojich koncoch)
+     * a dostal by potenciál (pin, pin) namiesto prepojenia na zvyšok siete.
+     */
+    private Pin getEndPin(WireEnd end) {
         if (end.getPin() != null) return end.getPin();
-        if (end.getJunction() != null) return end.getJunction().findConnectedPin();
+        if (end.getJunction() != null) return end.getJunction().findConnectedPin(this);
         return null;
     }
 

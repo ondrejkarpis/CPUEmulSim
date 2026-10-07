@@ -158,7 +158,7 @@ public class WireEnd extends Joint {
                 lastPosY = getLayoutY();
 
                 this.setColor(this.getWire().getColor().brighter());
-                this.getWire().updatePotential();
+                this.getWire().updatePotentialNetwork();
             } else {
                 this.setColor(Color.RED);
             }
@@ -185,7 +185,7 @@ public class WireEnd extends Joint {
                 lastPosY = getLayoutY();
 
                 this.setColor(this.getWire().getColor().brighter());
-                this.getWire().updatePotential();
+                this.getWire().updatePotentialNetwork();
             } else {
                 this.setColor(Color.RED);
             }
@@ -266,7 +266,7 @@ public class WireEnd extends Joint {
             this.pin.getOwner().localToParentTransformProperty().removeListener(pinPositionChangeListener);
             this.pin.clearWireEnd();
             this.pin = null;
-            this.getWire().updatePotential();
+            this.getWire().updatePotentialNetwork();
             this.setDefaultColor();
             if (getSheet().isSimulationRunning()) {
                 getSheet().addEvent(new SheetEvent(pinToUpdate));
@@ -277,7 +277,8 @@ public class WireEnd extends Joint {
             WireJunction orphanedJunction = this.junction;
             this.junction.removeWireEnd(this);
             this.junction = null;
-            this.getWire().updatePotential();
+            orphanedJunction.refreshConnectedWires();
+            this.getWire().updatePotentialNetwork();
             this.setDefaultColor();
 
             // Ak po odpojení tohto konca už na spájači nezostane žiadny pripojený koniec,
@@ -300,9 +301,11 @@ public class WireEnd extends Joint {
         if (this.junction == null) return;
         this.junction.layoutXProperty().removeListener(junctionPositionChangeListener);
         this.junction.layoutYProperty().removeListener(junctionPositionChangeListener);
+        WireJunction orphanedJunction = this.junction;
         this.junction.removeWireEnd(this);
         this.junction = null;
-        this.getWire().updatePotential();
+        orphanedJunction.refreshConnectedWires();
+        this.getWire().updatePotentialNetwork();
         this.setDefaultColor();
     }
 
