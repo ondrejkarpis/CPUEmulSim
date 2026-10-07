@@ -19,6 +19,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -66,7 +67,7 @@ public class ControlBus extends BusSymbol {
     private static final int MIN_ROWS = 3;
     private static final int MAX_ROWS = 60;
 
-    private static final Color RAIL_COLOR = Color.DARKGREEN;
+    private static final Color RAIL_COLOR = Color.DARKGOLDENROD;
 
     /** Hrúbka čiary relatívne k bunke (vodič má ~6 px, lišta teda o málo hrubšia). */
     private static final double RAIL_THICKNESS = 0.45;
@@ -266,10 +267,19 @@ public class ControlBus extends BusSymbol {
             visualsScheduled = false;
             int ctrl = getBus().getControlBus();
             for (TapPoint tap : taps) {
-                boolean high = INPUT_SIGNAL[tap.signal]
-                        ? isHigh(tap.pin)
-                        : (ctrl & (1 << BIT_OF_SIGNAL[tap.signal])) != 0;
-                tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
+                Potential.Value value;
+                if (INPUT_SIGNAL[tap.signal]) {
+                    // vstupný signál číta zo schémy - bez spojenia je HighZ (sivá)
+                    value = tap.pin.getPotential() != null
+                            ? tap.pin.getPotential().getValue()
+                            : Potential.Value.NC;
+                } else {
+                    Potential.Value driven = (ctrl & (1 << BIT_OF_SIGNAL[tap.signal])) != 0
+                            ? Potential.Value.HIGH
+                            : Potential.Value.LOW;
+                    value = valueOr(tap.pin, driven);
+                }
+                tap.dot.setFill(tapDotColor(RAIL_COLOR, value));
             }
         });
     }

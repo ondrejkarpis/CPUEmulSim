@@ -5,6 +5,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.Bus.Bus;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -97,6 +98,29 @@ public abstract class BusSymbol extends GateSymbol {
 
     public Bus getBus() {
         return Bus.getBus();
+    }
+
+    /**
+     * Farba kružku vývodu na zbernici podľa hodnoty na sieti: svetlý odtieň farby
+     * zbernice pre log. 1, tmavý odtieň pre log. 0 a sivá pre vysokú impedanciu (NC).
+     */
+    protected static Color tapDotColor(Color railColor, Potential.Value value) {
+        if (value == Potential.Value.HIGH) {
+            return railColor.interpolate(Color.WHITE, 0.5);
+        }
+        if (value == Potential.Value.LOW) {
+            return railColor.interpolate(Color.BLACK, 0.5);
+        }
+        return Color.GRAY;
+    }
+
+    /**
+     * Hodnota na pine; ak sieť ešte nie je vyhodnotená (NC - napr. beží zmena zbernice
+     * bez spustenej simulácie schémy), použije sa hodnota, ktorú zbernica ideálne ženie.
+     */
+    protected static Potential.Value valueOr(Pin pin, Potential.Value fallback) {
+        Potential.Value value = pin.getPotential() != null ? pin.getPotential().getValue() : Potential.Value.NC;
+        return value != Potential.Value.NC ? value : fallback;
     }
 
     private static class BusPin extends Pin {

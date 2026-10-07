@@ -72,7 +72,7 @@ public class DataBus8 extends BusSymbol {
     private static final int MIN_ROWS = 3;
     private static final int MAX_ROWS = 60;
 
-    private static final Color RAIL_COLOR = Color.DARKRED;
+    private static final Color RAIL_COLOR = Color.DARKGREEN;
 
     /** Hrúbka čiary relatívne k bunke (vodič má ~6 px, lišta teda o málo hrubšia). */
     private static final double RAIL_THICKNESS = 0.45;
@@ -278,9 +278,10 @@ public class DataBus8 extends BusSymbol {
             for (TapPoint tap : taps) {
                 // kružok ukazuje rozlíšenú hodnotu celej siete (silný vodič na sieti
                 // pretiahne slabú hodnotu zbernice), nie stav, ktorý si pin nastavila samotná zbernica
-                boolean high = tap.pin.getPotential() != null
-                        && tap.pin.getPotential().getValue() == Potential.Value.HIGH;
-                tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
+                Potential.Value value = tap.pin.getPotential() != null
+                        ? tap.pin.getPotential().getValue()
+                        : Potential.Value.NC;
+                tap.dot.setFill(tapDotColor(RAIL_COLOR, value));
             }
         });
     }

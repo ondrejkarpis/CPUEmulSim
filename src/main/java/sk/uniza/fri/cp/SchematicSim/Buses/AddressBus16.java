@@ -19,6 +19,7 @@ import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -66,7 +67,7 @@ public class AddressBus16 extends BusSymbol {
     private static final int MIN_ROWS = 3;
     private static final int MAX_ROWS = 60;
 
-    private static final Color RAIL_COLOR = Color.DARKSLATEBLUE;
+    private static final Color RAIL_COLOR = Color.DARKRED;
 
     /** Hrúbka čiary relatívne k bunke (vodič má ~6 px, lišta teda o málo hrubšia). */
     private static final double RAIL_THICKNESS = 0.45;
@@ -261,8 +262,10 @@ public class AddressBus16 extends BusSymbol {
             visualsScheduled = false;
             int address = Short.toUnsignedInt(getBus().getAddressBus());
             for (TapPoint tap : taps) {
-                boolean high = (address & (1 << tap.bit)) != 0;
-                tap.dot.setFill(high ? Color.LIME : Color.DARKGRAY);
+                Potential.Value driven = (address & (1 << tap.bit)) != 0
+                        ? Potential.Value.HIGH
+                        : Potential.Value.LOW;
+                tap.dot.setFill(tapDotColor(RAIL_COLOR, valueOr(tap.pin, driven)));
             }
         });
     }
