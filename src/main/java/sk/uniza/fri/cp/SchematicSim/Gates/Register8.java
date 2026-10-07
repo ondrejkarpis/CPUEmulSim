@@ -189,12 +189,12 @@ public class Register8 extends GateSymbol {
         pane.getChildren().add(title);
 
         for (int index = 0; index < 8; index++) {
-            Text dLabel = new Text("D" + index);
+            Text dLabel = new Text("D" + (index + 1));
             dLabel.setLayoutX(cell * 0.4);
             dLabel.setLayoutY((index + 1) * cell + cell * 0.25);
             dLabels[index] = dLabel;
 
-            Text qLabel = new Text("Q" + index);
+            Text qLabel = new Text("Q" + (index + 1));
             qLabel.setLayoutX(cell * 2.6);
             qLabel.setLayoutY((index + 1) * cell + cell * 0.25);
             qLabels[index] = qLabel;
