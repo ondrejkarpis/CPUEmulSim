@@ -41,7 +41,7 @@ import java.util.function.Consumer;
  * Chovanie (rovnako ako {@link AddressBus16}):
  * <ul>
  *     <li>dĺžku čiary možno meniť potiahnutím koncového rukoväťa (spodný koniec myšou);</li>
- *     <li>ľavé kliknutie na čiaru otvorí menu výberu vývodu D0..D7 a vytvorí vývod;</li>
+ *     <li>ľavé kliknutie na čiaru otvorí menu výberu vývodu DB0..DB7 a vytvorí vývod;</li>
  *     <li>natiahnutie spojenia (vodiča) na čiaru a pustenie myši tiež otvorí menu a pripojí vodič;</li>
  *     <li>každý vývod má meno Dx zobrazené nad spojením vedľa zbernice;</li>
  *     <li>z jednej zbernice možno ťahať viac rovnakých signálov - každé odbočenie tvorí
@@ -62,7 +62,7 @@ public class DataBus8 extends BusSymbol {
     private static String[] createPinNames() {
         String[] names = new String[8];
         for (int index = 0; index < names.length; index++) {
-            names[index] = "D" + index;
+            names[index] = "DB" + index;
         }
         return names;
     }
@@ -220,7 +220,7 @@ public class DataBus8 extends BusSymbol {
         double x = RAIL_WIDTH * cell / 2.0;
         double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), cell);
 
-        TapPin pin = new TapPin(this, "D" + bit, bit);
+        TapPin pin = new TapPin(this, "DB" + bit, bit);
         pin.setLayoutX(x);
         pin.setLayoutY(y);
         this.getChildren().add(pin);
@@ -231,7 +231,7 @@ public class DataBus8 extends BusSymbol {
         // dot je len vizuálny - myš ide skrz na pin, aby ťahaním z vývodu vzniklo spojenie
         dot.setMouseTransparent(true);
 
-        Text label = new Text("D" + bit);
+        Text label = new Text("DB" + bit);
         label.setLayoutX(x + cell * 0.6);
         label.setLayoutY(y - cell * 0.4);
         label.setFont(Font.font(cell * 0.5));
@@ -256,7 +256,7 @@ public class DataBus8 extends BusSymbol {
 
     private void changeTapBit(TapPoint tap, int bit) {
         tap.bit = bit;
-        tap.label.setText("D" + bit);
+            tap.label.setText("DB" + bit);
         driveTap(tap);
     }
 
@@ -471,7 +471,7 @@ public class DataBus8 extends BusSymbol {
         signalMenu.getItems().addAll(allMenuItem, new SeparatorMenuItem());
         ToggleGroup group = new ToggleGroup();
         for (int i = 0; i < menuItems.length; i++) {
-            RadioMenuItem item = new RadioMenuItem("D" + i);
+            RadioMenuItem item = new RadioMenuItem("DB" + i);
             item.setToggleGroup(group);
             menuItems[i] = item;
             signalMenu.getItems().add(item);
