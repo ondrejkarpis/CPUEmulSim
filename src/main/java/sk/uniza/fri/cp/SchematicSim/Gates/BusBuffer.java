@@ -64,7 +64,7 @@ public class BusBuffer extends GateSymbol {
     @Override
     protected List<Pin> createPins() {
         a = new InputPin(this, "A", 0, 1, Side.LEFT);
-        g = new InputPin(this, "G_", 1, 0, Side.TOP);
+        g = new InputPin(this, "G/", 1, 0, Side.TOP);
         y = new OutputPin(this, "Y", getGridWidth(), 1, Side.RIGHT);
         return Arrays.asList(a, g, y);
     }
@@ -127,6 +127,6 @@ public class BusBuffer extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "Bus buffer - Y = A pri G_=0, inak výstup v Z";
+        return "Bus buffer - Y = A pri G/=0, inak výstup v Z";
     }
 }

@@ -154,7 +154,7 @@ public class Register8 extends GateSymbol {
             dataPins[index] = new InputPin(this, "D" + index, 0, index + 1, Side.LEFT);
             pins.add(dataPins[index]);
         }
-        pinOE_ = new InputPin(this, "OE_", 0, 9, Side.LEFT);
+        pinOE_ = new InputPin(this, "OE/", 0, 9, Side.LEFT);
         pinLE = new InputPin(this, "LE", 0, 10, Side.LEFT);
         pins.add(pinOE_);
         pins.add(pinLE);
@@ -207,7 +207,7 @@ public class Register8 extends GateSymbol {
         pane.getProperties().put("dLabels", dLabels);
         pane.getProperties().put("qLabels", qLabels);
 
-        Text oeLabel = new Text("OE_");
+        Text oeLabel = new Text("OE/");
         oeLabel.setLayoutX(cell * 0.4);
         oeLabel.setLayoutY(cell * 9.3);
 
@@ -310,6 +310,6 @@ public class Register8 extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "8-bitový register (D-type latch) - LE=1 zapisuje dáta, OE_=0 povoľuje výstupy";
+        return "8-bitový register (D-type latch) - LE=1 zapisuje dáta, OE/=0 povoľuje výstupy";
     }
 }

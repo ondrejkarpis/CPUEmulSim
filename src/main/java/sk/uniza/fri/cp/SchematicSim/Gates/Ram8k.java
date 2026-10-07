@@ -110,9 +110,9 @@ public class Ram8k extends GateSymbol {
             dataPins[index] = new IoPin(this, "D" + index, 0, index + 1, Side.LEFT);
             pins.add(dataPins[index]);
         }
-        pinWE_ = new InputPin(this, "WE_", 0, 9, Side.LEFT);
-        pinOE_ = new InputPin(this, "OE_", 0, 10, Side.LEFT);
-        pinE1_ = new InputPin(this, "E1_", 0, 11, Side.LEFT);
+        pinWE_ = new InputPin(this, "WE/", 0, 9, Side.LEFT);
+        pinOE_ = new InputPin(this, "OE/", 0, 10, Side.LEFT);
+        pinE1_ = new InputPin(this, "E1/", 0, 11, Side.LEFT);
         pinE2 = new InputPin(this, "E2", 0, 12, Side.LEFT);
         pins.add(pinWE_);
         pins.add(pinOE_);
@@ -154,17 +154,17 @@ public class Ram8k extends GateSymbol {
         }
 
         // lave popisy: riadiace signály
-        Text weLabel = new Text("WE_");
+        Text weLabel = new Text("WE/");
         weLabel.setLayoutX(cell * 0.4);
         weLabel.setLayoutY(9 * cell + cell * 0.25);
         pane.getChildren().add(weLabel);
 
-        Text oeLabel = new Text("OE_");
+        Text oeLabel = new Text("OE/");
         oeLabel.setLayoutX(cell * 0.4);
         oeLabel.setLayoutY(10 * cell + cell * 0.25);
         pane.getChildren().add(oeLabel);
 
-        Text e1Label = new Text("E1_");
+        Text e1Label = new Text("E1/");
         e1Label.setLayoutX(cell * 0.4);
         e1Label.setLayoutY(11 * cell + cell * 0.25);
         pane.getChildren().add(e1Label);
@@ -258,7 +258,7 @@ public class Ram8k extends GateSymbol {
 
     @Override
     public String getShortDescription() {
-        return "8kB RAM – E1_=0 & E2=1 zapne čip, WE_=0 zápis, OE_=0 čítanie";
+        return "8kB RAM – E1/=0 & E2=1 zapne čip, WE/=0 zápis, OE/=0 čítanie";
     }
 
     private static class IoPin extends Pin {

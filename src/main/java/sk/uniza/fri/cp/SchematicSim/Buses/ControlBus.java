@@ -38,7 +38,7 @@ import java.util.function.Consumer;
  * Chovanie (rovnako ako {@link AddressBus16}):
  * <ul>
  *     <li>dĺžku čiary možno meniť potiahnutím koncového rukoväťa (spodný koniec myšou);</li>
- *     <li>ľavé kliknutie na čiaru otvorí menu výberu signálu MW_, MR_, IW_, IR_, IA_, IT a
+ *     <li>ľavé kliknutie na čiaru otvorí menu výberu signálu MW/, MR/, IW/, IR/, IA/, IT a
  *         vybraný signál sa pridá na zbernicu ako kruzok (vývod);</li>
  *     <li>natiahnutie spojenia (vodiča) na čiaru a pustenie myši tiež otvorí menu a pripojí vodič;</li>
  *     <li>každý vývod má názov signálu zobrazený nad spojením vedľa zbernice;</li>
@@ -46,7 +46,7 @@ import java.util.function.Consumer;
  *         vlastný samostatný vývod, aby si viacero vodičov nekonkurovalo na jednom pine.</li>
  * </ul>
  * <p>
- * Výstupné signály (MW_, MR_, IW_, IR_, IA_) sú riadené CPU a premietajú sa na vývody;
+ * Výstupné signály (MW/, MR/, IW/, IR/, IA/) sú riadené CPU a premietajú sa na vývody;
  * vstupný signál (IT) je riadený obvodom a CPU ho číta zo zbernice.
  *
  * @author Tomáš Hianik (pôvodný autor ControlBusCommunicator), adaptácia pre SchematicSim,
@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  */
 public class ControlBus extends BusSymbol {
 
-    private static final String[] SIGNAL_NAMES = {"MW_", "MR_", "IW_", "IR_", "IA_", "IT"};
+    private static final String[] SIGNAL_NAMES = {"MW/", "MR/", "IW/", "IR/", "IA/", "IT"};
 
     // bity riadiacej zbernice (pozri Bus.mapSignal)
     private static final int[] BIT_OF_SIGNAL = {8, 7, 6, 5, 4, 3};

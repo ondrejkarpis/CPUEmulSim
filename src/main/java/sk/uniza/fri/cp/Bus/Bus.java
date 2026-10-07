@@ -280,7 +280,7 @@ public class Bus{
      * @param MW_ Nová hodnota signálu MW.
      */
     synchronized public void setMW_(boolean MW_) {
-        mapToControlBus("MW_", MW_);
+        mapToControlBus("MW/", MW_);
     }
 
     /**
@@ -290,7 +290,7 @@ public class Bus{
      */
     synchronized public void setMR_(boolean MR_) {
         //this.dataBus.setValue(0); //kvazi odpojenie od zbernice
-        mapToControlBus("MR_", MR_);
+        mapToControlBus("MR/", MR_);
     }
     
     /**
@@ -299,7 +299,7 @@ public class Bus{
      * @param IW_ Nová hodnota signálu IW.
      */
     synchronized public void setIW_(boolean IW_) {
-        mapToControlBus("IW_", IW_);
+        mapToControlBus("IW/", IW_);
     }
 
     /**
@@ -309,7 +309,7 @@ public class Bus{
      */
     synchronized public void setIR_(boolean IR_) {
         //this.dataBus.setValue(0); //kvazi odpojenie od zbernice
-        mapToControlBus("IR_", IR_);
+        mapToControlBus("IR/", IR_);
     }
 
     /**
@@ -318,7 +318,7 @@ public class Bus{
      * @param IA_ Nová hodnota signálu IA.
      */
     synchronized public void setIA_(boolean IA_) {
-         mapToControlBus("IA_", IA_);
+         mapToControlBus("IA/", IA_);
     }
 
     /**
@@ -352,11 +352,11 @@ public class Bus{
      * Inicializácia riadiacej zbernice do východzích hodnôt.
      */
 	private void initControlBus(){
-        mapToControlBus("MW_", true);
-        mapToControlBus("MR_", true);
-        mapToControlBus("IW_", true);
-        mapToControlBus("IR_", true);
-        mapToControlBus("IA_", true);
+        mapToControlBus("MW/", true);
+        mapToControlBus("MR/", true);
+        mapToControlBus("IW/", true);
+        mapToControlBus("IR/", true);
+        mapToControlBus("IA/", true);
 
         mapToControlBus("IT", false);
         mapToControlBus("RY", false);
@@ -399,11 +399,11 @@ public class Bus{
      */
     private int mapSignal(String signal){
         switch (signal){
-            case "MW_": return 8;
-            case "MR_": return 7;
-            case "IW_": return 6;
-            case "IR_": return 5;
-            case "IA_": return 4;
+            case "MW/": return 8;
+            case "MR/": return 7;
+            case "IW/": return 6;
+            case "IR/": return 5;
+            case "IA/": return 4;
             case "IT": return 3;
             case "RY": return 2;
             case "BQ": return 1;
@@ -415,15 +415,15 @@ public class Bus{
 
     //
 //    synchronized public boolean isMW_() {
-//		return mapFromControlBus("MW_");
+//		return mapFromControlBus("MW/");
 //	}
 //
 //	synchronized public boolean isMR_() {
-//		return mapFromControlBus("MR_");
+//		return mapFromControlBus("MR/");
 //	}
 //
 //	synchronized public boolean isIW_() {
-//		return mapFromControlBus("IW_");
+//		return mapFromControlBus("IW/");
 //	}
 //
 //	synchronized public boolean isIR_() {
@@ -431,7 +431,7 @@ public class Bus{
 //	}
 //
     public boolean isIA_() {
-        return mapFromControlBus("IA_");
+        return mapFromControlBus("IA/");
     }
 //    
 //    /**
