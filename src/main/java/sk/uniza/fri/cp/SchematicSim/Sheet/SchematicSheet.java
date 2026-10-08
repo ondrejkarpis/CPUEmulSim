@@ -29,6 +29,7 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
+import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
@@ -39,8 +40,10 @@ import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Plocha simulátora - schematický editor. Nahrádza {@code Board} z BreadboardSim.
@@ -635,21 +638,32 @@ public class SchematicSheet extends ScrollPane {
     /**
      * Kopírovanie vybratých súčiastok a vodičov do schránky (Ctrl+C). Ukladá sa snímok typu,
      * vlastností a vzájomných gridových offsetov súčiastok - prilepenie (Ctrl+V) ich vloží
-     * rovnako rozložené, len posunuté na miesto pod kurzorom. Kopírujú sa LEN označené
-     * vodiče, a to iba tie, ktorých obidva konce sú na kopírovaných súčiastkach.
+     * rovnako rozložené, len posunuté na miesto pod kurzorom.
+     * <p>
+     * Kopírujú sa LEN označené vodiče, ale so všetkými typmi koncov - nielen keď sú obidva
+     * na pine súčiastky, ale aj keď končia na spájači ({@link WireJunction}). Po založení
+     * odbočky sa totiž kmeňový vodič rozdelí na niekoľko samostatných vodičov končiacich
+     * na spájači a takéto vodiče by sa inak vyhodili - pri prilepení by potom chýbali celé
+     * odbočky aj kmeň medzi nimi.
+     * <p>
+     * Vyberá sa uzáver nad spájačmi: doplnia sa vodiče, na ktorých spájačoch vybrané
+     * vodiče končia (spájač musí mať po prilepení hostiteľa) aj susedné vodiče patriace
+     * do kopírovanej skupiny súčiastok. Vodiče s pinmi mimo kopírovanej skupiny alebo
+     * také, ktoré by po prilepení ostali zavesené na spájači bez protistrany, sa odhodia.
      */
     public void copySelection() {
         if (!isEditingEnabled()) return;
         List<GateSymbol> gates = getSelectedGates();
-        List<Wire> wires = new ArrayList<>();
+        List<Wire> selectedWires = new ArrayList<>();
         for (Selectable selectable : selected) {
-            if (selectable instanceof Wire) wires.add((Wire) selectable);
+            if (selectable instanceof Wire) selectedWires.add((Wire) selectable);
         }
         // schránka sa pri KAŽDOM Ctrl+C vymaže - vloží sa len to, čo sa kopíruje teraz,
         // nie starý obsah z predchádzajúceho kopírovania
         clipboardGates = new ArrayList<>();
         clipboardWires = new ArrayList<>();
-        if (gates.isEmpty() && wires.isEmpty()) return;
+        // bez označených súčiastok nemajú vodiče ku kopírovaným pinnom čo pripojiť
+        if (gates.isEmpty()) return;
 
         int minX = Integer.MAX_VALUE;
         int minY = Integer.MAX_VALUE;
@@ -664,32 +678,162 @@ public class SchematicSheet extends ScrollPane {
                     gate.getGridPosX() - minX, gate.getGridPosY() - minY));
         }
 
-        clipboardWires = new ArrayList<>();
-        for (Wire wire : wires) {
-            Pin startPin = wire.getEnds()[0].getPin();
-            Pin endPin = wire.getEnds()[1].getPin();
-            if (startPin == null || endPin == null) continue;
-            if (!isCopiedGate(startPin.getOwner()) || !isCopiedGate(endPin.getOwner())) continue;
-
+        for (Wire wire : collectCopyableWires(selectedWires)) {
             List<Point2D> joints = new ArrayList<>();
             for (Joint joint : wire.getJoints()) {
                 joints.add(new Point2D(joint.getLayoutX(), joint.getLayoutY()));
             }
-            clipboardWires.add(new CopiedWire(wire, wire.getColor(), joints));
+            clipboardWires.add(new CopiedWire(wire.getColor(), wire.getBranchExit(),
+                    new CopiedEnd[]{copyEnd(wire.getEnds()[0]), copyEnd(wire.getEnds()[1])},
+                    joints));
         }
     }
 
-    private boolean isCopiedGate(GateSymbol gate) {
-        for (CopiedGate copied : clipboardGates) {
-            if (copied.source == gate) return true;
+    /** Popis jedného konca kopírovaného vodiča pre schránku. */
+    private CopiedEnd copyEnd(WireEnd end) {
+        Pin pin = end.getPin();
+        if (pin != null) {
+            GateSymbol owner = pin.getOwner();
+            return new CopiedEnd(owner, owner.getPins().indexOf(pin), false,
+                    new Point2D(end.getLayoutX(), end.getLayoutY()));
         }
-        return false;
+        WireJunction junction = end.getJunction();
+        if (junction != null) {
+            return new CopiedEnd(null, -1, true,
+                    new Point2D(junction.getLayoutX(), junction.getLayoutY()));
+        }
+        return new CopiedEnd(null, -1, false,
+                new Point2D(end.getLayoutX(), end.getLayoutY()));
+    }
+
+    /**
+     * Či možno vodič kopírovať: nemá voľný (nedokončený) koniec a všetky jeho piny sú
+     * na práve kopírovaných súčiastkach. Spájače na koncoch vodiča nevadia - tie sa
+     * obnovia spoločne so spolu-susednými vodičmi na rovnakom bode.
+     */
+    private boolean isWireCopyable(Wire wire, Set<GateSymbol> copiedGates) {
+        for (WireEnd end : wire.getEnds()) {
+            Pin pin = end.getPin();
+            if (pin != null) {
+                if (!copiedGates.contains(pin.getOwner())) return false;
+            } else if (end.getJunction() == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Vodiče, ktoré sa majú skopírovať - uzáver označených vodičov cez spájače.
+     * <p>
+     * Postup: zo začiatku sa vezmú označené vodiče spĺňajúce {@link #isWireCopyable}.
+     * Potom sa v uzávere opakovane: doplnia vodiče dotýkajúce sa spájačov už vybraných
+     * vodičov (spájač potrebuje hostiteľa, susedia z rovnakej skupiny nesmú chýbať) a
+     * odhodia sa vodiče, ktorých spájač sa nekopíruje (vedie mimo skupiny) alebo ktoré
+     * by na spájači ostali osamotené. Raz odhodený vodič sa už znova nepridá, takže
+     * cyklus je vždy konečný.
+     */
+    private List<Wire> collectCopyableWires(List<Wire> selectedWires) {
+        Set<GateSymbol> copiedGates = new HashSet<>();
+        for (CopiedGate copied : clipboardGates) copiedGates.add(copied.source);
+
+        List<Wire> result = new ArrayList<>();
+        for (Wire wire : selectedWires) {
+            if (wire.getParent() != null && isWireCopyable(wire, copiedGates)) {
+                result.add(wire);
+            }
+        }
+
+        Set<Wire> dropped = new HashSet<>();
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+
+            // doplnenie: hostiteľ spájača musí byť kopírovaný tiež (spájač na ňom žije)
+            // a susedné vodiče na spájači patriace do tej istej skupiny súčiastok
+            List<Wire> add = new ArrayList<>();
+            for (Wire wire : result) {
+                for (WireEnd end : wire.getEnds()) {
+                    WireJunction junction = end.getJunction();
+                    if (junction == null) continue;
+                    for (Wire neighbour : junction.getConnectedWires()) {
+                        if (!result.contains(neighbour) && !dropped.contains(neighbour)
+                                && !add.contains(neighbour) && isWireCopyable(neighbour, copiedGates)) {
+                            add.add(neighbour);
+                        }
+                    }
+                }
+            }
+            if (!add.isEmpty()) {
+                result.addAll(add);
+                changed = true;
+            }
+
+            // odhodenie: koniec na spájači, ktorého hostiteľ sa nekopíruje, lebo vedie
+            // mimo kopírovanej skupiny (alebo už bol odhodený)
+            List<Wire> remove = new ArrayList<>();
+            for (Wire wire : result) {
+                if (remove.contains(wire)) continue;
+                for (WireEnd end : wire.getEnds()) {
+                    WireJunction junction = end.getJunction();
+                    if (junction == null) continue;
+                    Wire host = junction.getWire();
+                    if (host != null && (dropped.contains(host)
+                            || (!result.contains(host) && !isWireCopyable(host, copiedGates)))) {
+                        remove.add(wire);
+                        break;
+                    }
+                }
+            }
+
+            // odhodenie: spájač, na ktorom by po prilepení zostal osamotený jediný koniec
+            // (druhý vodič vedie mimo skupiny) - vodič by inak visel na spájači bez protistrany
+            for (WireJunction junction : junctionsOf(result)) {
+                List<Wire> atJunction = junction.getConnectedWires();
+                Wire lone = null;
+                int inside = 0;
+                for (Wire wire : atJunction) {
+                    if (result.contains(wire)) {
+                        inside++;
+                        lone = wire;
+                    }
+                }
+                if (atJunction.size() >= 2 && inside == 1 && !remove.contains(lone)) {
+                    remove.add(lone);
+                }
+            }
+
+            if (!remove.isEmpty()) {
+                result.removeAll(remove);
+                dropped.addAll(remove);
+                changed = true;
+            }
+        }
+        return result;
+    }
+
+    /** Spájače, na ktorých končia vodiče z danej množiny. */
+    private static List<WireJunction> junctionsOf(List<Wire> wires) {
+        List<WireJunction> junctions = new ArrayList<>();
+        for (Wire wire : wires) {
+            for (WireEnd end : wire.getEnds()) {
+                WireJunction junction = end.getJunction();
+                if (junction != null && !junctions.contains(junction)) junctions.add(junction);
+            }
+        }
+        return junctions;
     }
 
     /**
      * Prilepenie súčiastok zo schránky (Ctrl+V) na poslednú pozíciu myši na mriežke.
      * Nové súčiastky sa po prilepení označia (výber sa presunie na ne), vodiče sa
      * pripoja na zodpovedajúce piny klonov.
+     * <p>
+     * Konce vodičov na spájačoch sa riešia v druhom prechode: spájač sa zdieľa podľa
+     * polohy, takže všetky konce v tom istom bode dostanú jeden spoločný objekt -
+     * rovnako ako pri načítaní súboru ({@link SchemeLoader}). Spájač sa vytvorí na už
+     * prilepenom vodiči prechádzajúcim daným bodom, prípadne ako samostatný na vodiči
+     * prvého konca, ktorý naň natrafí.
      */
     public void pasteClipboard() {
         if (!isEditingEnabled()) return;
@@ -725,30 +869,122 @@ public class SchematicSheet extends ScrollPane {
         double deltaPx = (targetX - clipboardBaseX) * gridSystem.getSizeX();
         double deltaPy = (targetY - clipboardBaseY) * gridSystem.getSizeY();
 
+        Map<Long, WireJunction> hubByKey = new HashMap<>();
+        List<Wire> pastedWires = new ArrayList<>();
+        List<JunctionEnd> pendingEnds = new ArrayList<>();
+
         for (CopiedWire copied : clipboardWires) {
-            Pin startPin = clonePin(copied.source.getEnds()[0].getPin(), cloneBySource);
-            Pin endPin = clonePin(copied.source.getEnds()[1].getPin(), cloneBySource);
-            if (startPin == null || endPin == null) continue;
+            // konce na pine sa musia dať vyriešiť na klony - inak sa vodič neprilepí
+            Pin[] pins = new Pin[2];
+            boolean resolvable = true;
+            for (int i = 0; i < 2; i++) {
+                if (copied.ends[i].gate == null) continue;
+                pins[i] = clonePin(copied.ends[i], cloneBySource);
+                if (pins[i] == null) {
+                    resolvable = false;
+                    break;
+                }
+            }
+            if (!resolvable) continue;
 
             Wire wire = new Wire(this);
             addItem(wire);
             wire.changeColor(copied.color);
-            wire.getEnds()[0].connect(startPin);
-            wire.getEnds()[1].connect(endPin);
+            if (copied.branchExit != null) wire.setBranchExit(copied.branchExit);
+            pastedWires.add(wire);
+
+            WireEnd[] ends = wire.getEnds();
+            for (int i = 0; i < 2; i++) {
+                CopiedEnd source = copied.ends[i];
+                if (source.gate != null) {
+                    ends[i].connect(pins[i]);
+                } else {
+                    // spájač/voľný koniec sa najprv umiestni na budúcu pozíciu, aby mali
+                    // zlomky správnu trasu; na spájač sa pripojí až v druhom prechode
+                    double x = source.position.getX() + deltaPx;
+                    double y = source.position.getY() + deltaPy;
+                    ends[i].moveTo(x, y);
+                    if (source.junction) pendingEnds.add(new JunctionEnd(ends[i], x, y));
+                }
+            }
             for (Point2D joint : copied.joints) {
                 wire.splitLastSegment().moveTo(joint.getX() + deltaPx, joint.getY() + deltaPy);
             }
         }
+
+        // druhý prechod: konce, ktoré končia na spájači - najprv sa hľadá už vytvorený
+        // spájač v rovnakom bode, inak sa založí na prilepenom vodiči prechádzajúcim
+        // bodom (legacy) alebo ako samostatný na vodiči tohto konca
+        for (JunctionEnd pending : pendingEnds) {
+            resolveJunctionEnd(pending, pastedWires, hubByKey);
+        }
+
+        // dokončené vodiče sa usadia na mriežku - počas skladania mohli byť segmenty
+        // prepočítané skôr, než bol vodič celý zapojený (nesnapovaná trasa)
+        for (Wire wire : pastedWires) {
+            wire.settleToGrid();
+        }
     }
 
-    /** Pin s rovnakým indexom na klone súčiastky (null, ak pôvodný pin nemá klon). */
-    private Pin clonePin(Pin sourcePin, Map<GateSymbol, GateSymbol> cloneBySource) {
-        if (sourcePin == null) return null;
-        GateSymbol clone = cloneBySource.get(sourcePin.getOwner());
+    /**
+     * Pripojenie konca vodiča na spájač v danej pozícii. Spájače sa zdieľajú cez
+     * {@code hubByKey} (kľúč = poloha), takže všetky konce v tom istom bode dostanú
+     * jeden objekt. Logika zodpovedá {@link SchemeLoader} pri načítaní súboru.
+     */
+    private void resolveJunctionEnd(JunctionEnd pending, List<Wire> pastedWires,
+                                    Map<Long, WireJunction> hubByKey) {
+        long key = junctionKey(pending.x, pending.y);
+        Point2D position = new Point2D(pending.x, pending.y);
+
+        WireJunction shared = hubByKey.get(key);
+        if (shared != null && !shared.isRemoved()) {
+            pending.end.connect(shared);
+            return;
+        }
+
+        // existujúci spájač presne v bode (založený iným koncom tohto prilepenia)
+        for (Wire wire : pastedWires) {
+            if (wire == pending.end.getWire()) continue;
+            WireJunction existing = wire.findJunctionAt(position);
+            if (existing != null) {
+                hubByKey.put(key, existing);
+                pending.end.connect(existing);
+                return;
+            }
+        }
+
+        // vodič prilepený v tomto bode prechádza - spájač sa založí rozdelením
+        for (Wire wire : pastedWires) {
+            if (wire == pending.end.getWire()) continue;
+            if (wire.findSegmentNear(position) != null) {
+                WireJunction created = wire.createJunction(position);
+                if (created != null) {
+                    hubByKey.put(key, created);
+                    pending.end.connect(created);
+                    return;
+                }
+            }
+        }
+
+        // samostatný spájač na vodiči tohto konca (kmeň končí priamo na spájači)
+        WireJunction standalone = pending.end.getWire().createStandaloneHub(position);
+        if (standalone != null && !standalone.isRemoved()) {
+            hubByKey.put(key, standalone);
+            pending.end.connect(standalone);
+        }
+    }
+
+    /** Kľúč polohy spájača pre zdieľanie medzi koncami rôznych vodičov. */
+    private static long junctionKey(double x, double y) {
+        return Math.round(x) * 1000003L + Math.round(y);
+    }
+
+    /** Pin na klone súčiastky podľa popisu konca (null, ak sa klon nepodarilo vytvoriť). */
+    private Pin clonePin(CopiedEnd source, Map<GateSymbol, GateSymbol> cloneBySource) {
+        GateSymbol clone = cloneBySource.get(source.gate);
         if (clone == null) return null;
-        int index = sourcePin.getOwner().getPins().indexOf(sourcePin);
-        if (index < 0 || index >= clone.getPins().size()) return null;
-        return clone.getPins().get(index);
+        if (source.pinIndex < 0 || source.pinIndex >= clone.getPins().size()) return null;
+        return clone.getPins().get(source.pinIndex);
     }
 
     /** Súradnice poslednej polohy myši prepočítané na mriežku (pri neznámej polohe 2,2). */
@@ -875,18 +1111,58 @@ public class SchematicSheet extends ScrollPane {
     }
 
     /**
-     * Snímka jedného kopírovaného vodiča - referencie na originál, farba a pozície
-     * zlomov (v súradniciach plochy, offsetované pri prilepení rovnakým posunom ako súčiastky).
+     * Popis konca kopírovaného vodiča: buď pin (súčiastka + index pinu), alebo spájač
+     * či voľný koniec so svojou polohou v layoutových súradniciach plochy.
+     */
+    private static final class CopiedEnd {
+        /** Vlastník pinu, alebo null ak koniec nie je na pine. */
+        final GateSymbol gate;
+        final int pinIndex;
+        /** Koniec je napojený na spájač (WireJunction) v bode {@link #position}. */
+        final boolean junction;
+        /** Poloha konca/spájača v layoutových súradniciach plochy. */
+        final Point2D position;
+
+        CopiedEnd(GateSymbol gate, int pinIndex, boolean junction, Point2D position) {
+            this.gate = gate;
+            this.pinIndex = pinIndex;
+            this.junction = junction;
+            this.position = position;
+        }
+    }
+
+    /**
+     * Snímka jedného kopírovaného vodiča - farba, preferovaný smer odbočky, oba konce
+     * (popis vyššie) a pozície zlomov. Všetky súradnice sú v layoutových súradniciach
+     * plochy a pri prilepení sa posunú o rovnaký delta ako súčiastky.
      */
     private static final class CopiedWire {
-        final Wire source;
         final Color color;
+        final Side branchExit;
+        final CopiedEnd[] ends;
         final List<Point2D> joints;
 
-        CopiedWire(Wire source, Color color, List<Point2D> joints) {
-            this.source = source;
+        CopiedWire(Color color, Side branchExit, CopiedEnd[] ends, List<Point2D> joints) {
             this.color = color;
+            this.branchExit = branchExit;
+            this.ends = ends;
             this.joints = joints;
+        }
+    }
+
+    /**
+     * Koniec vodiča čakajúci v druhom prechode prilepenia na pripojenie k spájaču
+     * v bode (x, y) - spájač ešte nemusel existovať, lebo jeho hostiteľ sa lepil neskôr.
+     */
+    private static final class JunctionEnd {
+        final WireEnd end;
+        final double x;
+        final double y;
+
+        JunctionEnd(WireEnd end, double x, double y) {
+            this.end = end;
+            this.x = x;
+            this.y = y;
         }
     }
 }

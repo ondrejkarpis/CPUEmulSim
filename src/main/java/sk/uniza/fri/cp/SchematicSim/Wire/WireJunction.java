@@ -408,6 +408,22 @@ public class WireJunction extends Joint implements Connectable {
         return connectedEnds;
     }
 
+    /**
+     * Vodiče, ktoré sa tohto spájača dotýkajú (konce pripojené naň + hostiteľ, prípadne
+     * legacy kmeň, ktorým spájač len prechádza). Každý vodič je v zozname najraz.
+     * Používa kopírovanie výberu na uzáver vodičov cez spájače.
+     */
+    public List<Wire> getConnectedWires() {
+        List<Wire> wires = new ArrayList<>();
+        for (WireEnd end : new ArrayList<>(connectedEnds)) {
+            Wire wire = end.getWire();
+            if (wire != null && !wires.contains(wire)) wires.add(wire);
+        }
+        Wire host = this.getWire();
+        if (host != null && !wires.contains(host)) wires.add(host);
+        return wires;
+    }
+
     @Override
     public void highlight(int highlightType) {
     }
