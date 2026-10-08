@@ -3,7 +3,6 @@ package sk.uniza.fri.cp.SchematicSim.Sheet;
 import javafx.scene.Group;
 import javafx.scene.layout.Pane;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
-import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
 
@@ -90,11 +89,6 @@ public class SheetLayersManager {
 
         if (object instanceof WireJunction) {
             ((WireJunction) object).delete();
-            return true;
-        }
-
-        if (object instanceof Joint) {
-            ((Joint) object).getWire().removeJoint((Joint) object);
             return true;
         }
 

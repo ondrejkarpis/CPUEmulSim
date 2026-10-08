@@ -16,190 +16,380 @@ import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Bod pripojenia vodiča na iný vodič (spájač). Umožňuje začínať a ukončovať
- * vodiče na existujúcich vodičoch. Vykresľuje sa ako malý plný krúžok.
- * Implementuje {@link Connectable} pre zapojenie do elektrickej siete potenciálov.
+ * Spájač - bod, v ktorom sa stretávajú vodiče.
+ * <p>
+ * Spájač je v novom modeli vlastnícky nezávislý (nepatrí žiadnemu vodiču) a správa
+ * sa podľa počtu napojených koncov:
+ * <ul>
+ *     <li>0-1 koniec → zničí sa (zostáva len voľný koniec vodiča),</li>
+ *     <li>2 konce → <b>neviditeľný</b> zlom dvoch priamych vodičov; ak sú konce
+ *         kolmé, spájač ostáva ako neviditeľný zlom, ak sú protiľahlé (v jednej
+ *         priamke), vodiče sa zlúčia do jedného,</li>
+ *     <li>3 a viac koncov → viditeľný čierny krúžok.</li>
+ * </ul>
+ * Konce sa nikdy neťahajú ani nepresúvajú ({@link #makeImmovable()}) - spájač je
+ * pevný bod; pohyb vzniká len posunom súčiastok. Zmeny sa neriešia priamo vo
+ * listeneroch, ale cez špinavú množinu ({@link #markDirty}) a {@link #processNow()},
+ * aby sa počas vytvárania/rušenia vodičov neriešili prechodné stavy.
+ *
+ * @author Tomáš Hianik (pôvodný autor), adaptácia pre SchematicSim
  */
 public class WireJunction extends Joint implements Connectable {
 
     private static final Color FILL_COLOR = Color.BLACK;
 
+    /** Tolerancia pre kolinearitu (súradnice sú presné násobky mriežky). */
+    private static final double EPS = 1e-6;
+
     private final List<WireEnd> connectedEnds = new ArrayList<>();
     private final Circle junctionDot;
-    private final Circle colorizerDot;
     private final double baseRadius;
-
-    /**
-     * Vodič, ktorý spájač obýva (v novom modeli je spájač hraničným bodom dvoch vodičov -
-     * kmeň sa v ňom rozdeľuje na dva vodiče). Hostiteľ zodpovedá za vykreslenie node.
-     */
-    private Wire hostWire;
 
     /** Príznak, že je spájač už zničený (zabezpečuje idempotentné mazanie). */
     private boolean removed;
 
-    public WireJunction(SchematicSheet sheet, Wire wire) {
-        super(sheet, wire);
+    // === špinavá množina spájačov čakajúcich na prepočítanie ===
+
+    private static final Set<WireJunction> dirtyJunctions = new LinkedHashSet<>();
+    private static boolean processing;
+    private static boolean reconcileScheduled;
+
+    public WireJunction(SchematicSheet sheet) {
+        super(sheet, null);
 
         GridSystem grid = getSheet().getGrid();
         double r = grid.getSizeMin() / 7.0;
         this.baseRadius = r;
 
         this.junctionDot = new Circle(0, 0, r, FILL_COLOR);
-        this.colorizerDot = new Circle(0, 0, r * 1.3, Color.RED);
-        this.colorizerDot.setOpacity(0);
-        this.colorizerDot.setMouseTransparent(true);
 
         this.getChildren().add(this.junctionDot);
-        this.getChildren().add(this.colorizerDot);
 
-        // zvýraznenie bodu pri nájazde kurzora - signalizuje, že sa dá uchopiť a presunúť
+        // nový spájač je spočiatku neviditeľný (stane sa viditeľným až pri 3+ vodičoch)
+        updateVisibility();
+
+        // spájače sa nikdy neťahajú priamo - pohyb vzniká len posunom súčiastok
+        makeImmovable();
+
+        // zvýraznenie bodu pri nájazde kurzora (len ak je viditeľný)
         this.addEventFilter(MouseEvent.MOUSE_ENTERED, event -> this.junctionDot.setRadius(this.baseRadius * 1.2));
         this.addEventFilter(MouseEvent.MOUSE_EXITED, event -> this.junctionDot.setRadius(this.baseRadius));
 
         registerWireStartHandlers();
     }
 
-    public void setHostWire(Wire wire) {
-        this.hostWire = wire;
-    }
-
-    public Wire getHostWire() {
-        return this.hostWire;
-    }
-
-    @Override
-    public Wire getWire() {
-        return this.hostWire != null ? this.hostWire : super.getWire();
-    }
-
-    public boolean isRemoved() {
-        return this.removed;
-    }
-
-    void markRemoved() {
-        this.removed = true;
-    }
-/**
-     * Spájač, ktorý sa práve presúva myšou (null, ak žiadny) - potrebné pre routing bez
-     * snapovania počas ťahania.
+    /**
+     * Vytvorí nový spájač na zadanej pozícii a vloží ho do vrstvy spájačov.
      */
-    private static WireJunction draggingJunction;
+    public static WireJunction at(SchematicSheet sheet, double x, double y) {
+        WireJunction junction = new WireJunction(sheet);
+        junction.setLayoutX(x);
+        junction.setLayoutY(y);
+        sheet.getJunctionsLayer().getChildren().add(junction);
+        return junction;
+    }
 
-    static boolean isAnyJunctionDragged() {
-        return draggingJunction != null;
+    /** Skrátené vytvorenie spájača z bodu. */
+    public static WireJunction at(SchematicSheet sheet, Point2D position) {
+        return at(sheet, position.getX(), position.getY());
     }
 
     /**
-     * Umožňuje začínať nový vodič priamo ťahaním z tohto spájača (Ctrl+ťah, malý plný krúžok)
-     * a presúvať spájač prostým ťahaním myšou (pripojené vodiče sa automaticky preroutujú).
+     * Najbližší existujúci spájač v okolí bodu (vrátane neviditeľných zlomov, ktoré
+     * myšou nebuchne). Používa sa pri pustení/začatí ťahu v blízkosti existujúceho
+     * spájača.
      */
+    public static WireJunction findNear(SchematicSheet sheet, Point2D point, double tolerance) {
+        WireJunction best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (javafx.scene.Node node : sheet.getJunctionsLayer().getChildren()) {
+            if (!(node instanceof WireJunction)) continue;
+            WireJunction junction = (WireJunction) node;
+            if (junction.removed) continue;
+            double dist = junction.getConnectionPoint().distance(point);
+            if (dist <= tolerance && dist < bestDist) {
+                bestDist = dist;
+                best = junction;
+            }
+        }
+        return best;
+    }
+
+    // === udalosti: výber vodičov + tvorba odbočky ťahaním ===
+
     private void registerWireStartHandlers() {
+        // Klik (bez ťahu) na viditeľný spájač vyberá vodiče, ktoré sa v ňom stretávajú.
+        // Ťah (DRAG_DETECTED nižšie) z neho spúšťa novú odbočku.
+        this.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            if (!event.isPrimaryButtonDown()) return;
+
+            SchematicSheet sheet = getSheet();
+            List<Wire> wires = getConnectedWires();
+
+            if (event.isShortcutDown() && !event.isShiftDown()) {
+                // Ctrl+klik = výber reťazca medzi ukotveniami (cez neviditeľné zlomy)
+                if (!wires.isEmpty()) {
+                    sheet.clearSelect();
+                    for (Wire wire : wires.get(0).collectChain()) {
+                        sheet.addSelect(wire);
+                    }
+                }
+            } else if (event.isShiftDown()) {
+                for (Wire wire : wires) {
+                    if (wire.isSelected()) sheet.removeSelect(wire);
+                    else sheet.addSelect(wire);
+                }
+            } else {
+                sheet.clearSelect();
+                for (Wire wire : wires) {
+                    sheet.addSelect(wire);
+                }
+            }
+            event.consume();
+        });
+
+        // ťah zo spájača = nová odbočka
         this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
             if (!event.isPrimaryButtonDown()) return;
             if (!getSheet().isEditingEnabled()) return;
-            if (event.isShortcutDown()) {
-                // Ctrl+ťah = spustenie novej odbočky zo spájača
-                Pin.beginWireCreation(this);
-                this.startFullDrag();
-                event.consume();
-                return;
-            }
 
-            // prostý ťah = presun spájača (body vodičov sa aktuálne vykreslú nelícne)
-            draggingJunction = this;
+            Pin.beginWireCreation(this);
             this.startFullDrag();
             event.consume();
         });
 
         this.addEventFilter(MouseEvent.MOUSE_DRAGGED, event -> {
-            if (draggingJunction == this) {
-                Point2D sheet = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-                setLayoutX(sheet.getX());
-                setLayoutY(sheet.getY());
-                event.consume();
-                return;
-            }
-
             Wire inProgress = Pin.getInProgressWire();
             if (inProgress != null) {
                 Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-                inProgress.updateBranchDrag(sheetXY.getX(), sheetXY.getY());
+                inProgress.updateCreationDrag(sheetXY.getX(), sheetXY.getY());
                 event.consume();
             }
         });
 
         this.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
-            if (draggingJunction == this) {
-                draggingJunction = null;
-                finishJunctionDrag();
+            if (Pin.getInProgressWire() != null) {
+                Pin.finishInProgressWire();
                 event.consume();
-                return;
             }
-
-            Wire inProgress = Pin.getInProgressWire();
-            if (inProgress == null) return;
-
-            inProgress.setMouseTransparent(false);
-            inProgress.setOpacity(1);
-            if (!inProgress.areBothEndsConnected()) {
-                inProgress.delete();
-            }
-            Pin.finishInProgressWire();
-            if (inProgress.areBothEndsConnected()) {
-                inProgress.settleToGrid();
-            }
-            event.consume();
         });
     }
 
-    /** Zarovnanie presunutého spájača na mriežku a prepočet trás pripojených vodičov. */
-    private void finishJunctionDrag() {
-        GridSystem grid = getSheet().getGrid();
-        double size = grid.getSizeMin();
-        setLayoutX(Math.round(getLayoutX() / size) * size);
-        setLayoutY(Math.round(getLayoutY() / size) * size);
-
-        for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
-            Wire wire = end.getWire();
-            if (wire != null) {
-                wire.reroute();
-                wire.updatePotential();
-            }
-        }
+    /**
+     * Prepočíta viditeľnosť spájača podľa počtu napojených koncov. Krúžok sa zobrazí
+     * až pri troch a viacerých vodičoch; menej ako tri = neviditeľný zlom dvoch vodičov.
+     * Neviditeľný spájač je aj myšou nepriepustný - nájde sa geometricky cez vodič.
+     */
+    void updateVisibility() {
+        boolean visible = connectedEnds.size() >= 3;
+        this.junctionDot.setVisible(visible);
+        setMouseTransparent(!visible);
     }
 
-    @Override
-    protected Group generateJointGraphic(double radius) {
-        return new Group();
-    }
+    // === špinavá množina a reconcile ===
 
-    public void setJunctionColor(Color color) {
-        if (Platform.isFxApplicationThread()) {
-            this.colorizerDot.setFill(color);
-            this.colorizerDot.setOpacity(1);
-        } else {
+    /**
+     * Označí spájač na prepočítanie. Riešenie sa odloží na koniec frontu udalostí
+     * ({@code Platform.runLater}) - počas vytvárania vodiča potrebujeme, aby spájač
+     * najprv existoval s prechodným počtom koncov. Viacnásobné volania sa spájajú.
+     */
+    public static void markDirty(WireJunction junction) {
+        if (junction == null || junction.removed) return;
+        if (!dirtyJunctions.add(junction)) return;
+        if (reconcileScheduled) return;
+        reconcileScheduled = true;
+        try {
             Platform.runLater(() -> {
-                this.colorizerDot.setFill(color);
-                this.colorizerDot.setOpacity(1);
+                reconcileScheduled = false;
+                processNow();
             });
+        } catch (IllegalStateException ex) {
+            // FX toolkit nie je inicializovaný (headless) - vyriešime synchronne
+            reconcileScheduled = false;
+            if (!processing) processNow();
         }
-    }
-
-    public void resetJunctionColor() {
-        if (Platform.isFxApplicationThread()) this.colorizerDot.setOpacity(0);
-        else Platform.runLater(() -> this.colorizerDot.setOpacity(0));
     }
 
     /**
-     * Nájde pin, na ktorý je tento spájač elektricky napojený cez vodiče.
-     * V novom modeli sa spájačom vodiace vodiče navzájom dotýkajú cez napojené konce,
-     * preto sa prechádza graf napojených koncov (s ochranou proti cyklom). Ako poistka
-     * pre staré súbory ostáva prechod cez segmenty.
+     * Okamžité prepočítanie všetkých označených spájačov. Volá sa na bezpečných
+     * miestach (zmazanie vodiča, dokončenie vytvárania, načítanie/lepenie schémy);
+     * inak sa rieši odložením cez {@link #markDirty}.
+     */
+    public static void processNow() {
+        if (processing) return;
+        processing = true;
+        try {
+            int guard = 0;
+            while (!dirtyJunctions.isEmpty() && guard++ < 1000) {
+                Iterator<WireJunction> iterator = dirtyJunctions.iterator();
+                WireJunction junction = iterator.next();
+                iterator.remove();
+                reconcile(junction);
+            }
+        } finally {
+            processing = false;
+        }
+    }
+
+    private static void reconcile(WireJunction junction) {
+        if (junction == null || junction.removed) return;
+
+        // odstráň mŕtve konce (vodič už neexistuje)
+        junction.connectedEnds.removeIf(end -> end.getWire() == null);
+
+        int degree = junction.connectedEnds.size();
+        if (degree <= 1) {
+            destroy(junction);
+            return;
+        }
+
+        if (degree == 2) {
+            WireEnd end1 = junction.connectedEnds.get(0);
+            WireEnd end2 = junction.connectedEnds.get(1);
+            Wire wire1 = end1.getWire();
+            Wire wire2 = end2.getWire();
+
+            // oba konce toho istého vodiča (slučka) - necháme ako je
+            if (wire1 == wire2) {
+                junction.updateVisibility();
+                return;
+            }
+
+            Point2D dir1 = legDirection(junction, end1, wire1);
+            Point2D dir2 = legDirection(junction, end2, wire2);
+
+            // nulový ramenný vektor = vodič má nulovú dĺžku (obe konce v bode spájača)
+            if (dir1.magnitude() < EPS) {
+                wire1.delete();
+                markDirty(junction);
+                return;
+            }
+            if (dir2.magnitude() < EPS) {
+                wire2.delete();
+                markDirty(junction);
+                return;
+            }
+
+            double cross = dir1.getX() * dir2.getY() - dir1.getY() * dir2.getX();
+            double dot = dir1.getX() * dir2.getX() + dir1.getY() * dir2.getY();
+
+            if (Math.abs(cross) <= EPS && dot < 0) {
+                // protiľahlé smery = jedna priama - zlúčime vodiče do jedného
+                merge(junction, wire1, end1, wire2, end2);
+                return;
+            }
+        }
+
+        // kolmé zlomy (alebo 3+ vodiče) - viditeľnosť podľa počtu koncov
+        junction.updateVisibility();
+    }
+
+    /** Smer ramena vodiča od spájača - smer na DRUHÝ koniec vodiča. */
+    private static Point2D legDirection(WireJunction junction, WireEnd end, Wire wire) {
+        WireEnd other = wire.getEnds()[0] == end ? wire.getEnds()[1] : wire.getEnds()[0];
+        return new Point2D(other.getLayoutX() - junction.getLayoutX(),
+                other.getLayoutY() - junction.getLayoutY());
+    }
+
+    /**
+     * Zlúčenie dvoch kolínkových vodičov do jedného. ZACHOVÁ sa vodič {@code keep}
+     * (aj s jeho koncom na spájači); vodič {@code drop} sa zruší a jeho voľný koniec
+     * sa prepojí na cieľ pôvodného konca {@code dropEnd} (pin alebo iný spájač),
+     * prípadne sa presunie na jeho pozíciu. Spájač sa zničí.
+     */
+    private static void merge(WireJunction junction, Wire keep, WireEnd keepEnd, Wire drop, WireEnd dropEnd) {
+        // počas náhľadu/ťahu sa nemá zlúčovať - dokončenie ťahu prepočíta znova
+        if (keep.isPreview() || drop.isPreview()) return;
+        if (Pin.getInProgressWire() == keep || Pin.getInProgressWire() == drop) return;
+        if (WireEnd.isGrabbing(keep) || WireEnd.isGrabbing(drop)) return;
+        if (keep == drop) return;
+
+        WireEnd dropOther = drop.getEnds()[0] == dropEnd ? drop.getEnds()[1] : drop.getEnds()[0];
+        Connectable target = dropOther.getPin() != null ? (Connectable) dropOther.getPin() : dropOther.getJunction();
+        Point2D targetPos = dropOther.getConnectionPoint();
+
+        // uvoľní cieľ, odpojí oba konce drop vodiča a zruší ho
+        dropOther.disconnect();
+        dropEnd.disconnect();
+        drop.delete();
+
+        // ponechaný koniec sa presunie na uvoľnený cieľ (alebo na jeho pozíciu)
+        keepEnd.disconnect();
+        destroy(junction);
+        if (target != null) {
+            keepEnd.connect(target);
+        } else {
+            keepEnd.moveTo(targetPos.getX(), targetPos.getY());
+        }
+        keep.updateGeometry();
+    }
+
+    /** Zničenie spájača - uvoľní všetky jeho konce a odstráni ho z plochy. */
+    static void destroy(WireJunction junction) {
+        if (junction == null || junction.removed) return;
+        junction.markRemoved();
+        dirtyJunctions.remove(junction);
+        for (WireEnd end : new ArrayList<>(junction.connectedEnds)) {
+            end.disconnect();
+        }
+        junction.connectedEnds.clear();
+        javafx.scene.Parent parent = junction.getParent();
+        if (parent instanceof javafx.scene.layout.Pane) {
+            ((javafx.scene.layout.Pane) parent).getChildren().remove(junction);
+        } else if (parent instanceof Group) {
+            ((Group) parent).getChildren().remove(junction);
+        }
+    }
+
+    // === prístup k napojeným koncom ===
+
+    void addWireEnd(WireEnd end) {
+        if (!connectedEnds.contains(end)) connectedEnds.add(end);
+        updateVisibility();
+    }
+
+    void removeWireEnd(WireEnd end) {
+        connectedEnds.remove(end);
+        updateVisibility();
+    }
+
+    List<WireEnd> getConnectedEnds() {
+        return connectedEnds;
+    }
+
+    /**
+     * Vodiče, ktoré sa tohto spájača dotýkajú (každý najraz). Používa sa pri výbere
+     * spájačom a pri prechode cez neviditeľné zlomy.
+     */
+    public List<Wire> getConnectedWires() {
+        List<Wire> wires = new ArrayList<>();
+        for (WireEnd end : new ArrayList<>(connectedEnds)) {
+            Wire wire = end.getWire();
+            if (wire != null && !wires.contains(wire)) wires.add(wire);
+        }
+        return wires;
+    }
+
+    /**
+     * {@code true} ak je spájač prechodným bodom dvoch vodičov (neviditeľný zlom) -
+     * reťazec výberu (Ctrl+klik) cez neho prechádza.
+     */
+    boolean isCrossable() {
+        return !removed && connectedEnds.size() == 2;
+    }
+
+    // === potenciály ===
+
+    /**
+     * Nájde pin, na ktorý je tento spájač elektricky napojený cez vodiče. V novom modeli
+     * sa spájačom vodiace vodiče navzájom dotýkajú cez napojené konce, preto sa prechádza
+     * graf napojených koncov (s ochranou proti cyklom).
      */
     public Pin findConnectedPin() {
         return findConnectedPin(null);
@@ -237,39 +427,13 @@ public class WireJunction extends Joint implements Connectable {
                 }
             }
         }
-
-        // legacy: prechod cez segmenty (starý model s vnútorným spájačom na kmeňovom vodiči)
-        if (!visited.isEmpty()) {
-            Pin legacy = findPinThroughSegments(avoid);
-            if (legacy != null) return legacy;
-        }
-        return null;
-    }
-
-    private Pin findPinThroughSegments(Wire avoid) {
-        Pin pin = findPinThroughSegments(wireSegments[0], this, avoid);
-        if (pin != null) return pin;
-        return findPinThroughSegments(wireSegments[1], this, avoid);
-    }
-
-    private static Pin findPinThroughSegments(WireSegment seg, Joint visited, Wire avoid) {
-        if (seg == null) return null;
-        if (avoid != null && seg.getWire() == avoid) return null;
-        Joint other = seg.getOtherJoint(visited);
-        if (other instanceof WireEnd) {
-            return ((WireEnd) other).getPin();
-        }
-        if (other instanceof WireJunction) {
-            return ((WireJunction) other).findPinThroughSegments(other.getPrimaryWireSegment(), other, avoid);
-        }
         return null;
     }
 
     /**
      * Prepočíta potenciály vodičov momentálne napojených na tento spájač (obnoví celú
      * sieť okolo prvého z nich - {@link Wire#updatePotentialNetwork()} prejde všetkých
-     * susedov cez spájače). Volá sa po odpojení konca, keď si zostávajúce vodiče musia
-     * prepočítať cestu k pinom, ktorá viedla cez odpojený koniec.
+     * susedov cez spájače). Volá sa po odpojení konca.
      */
     void refreshConnectedWires() {
         for (WireEnd end : new ArrayList<>(this.connectedEnds)) {
@@ -282,102 +446,8 @@ public class WireJunction extends Joint implements Connectable {
     }
 
     @Override
-    public void connectWireSegment(WireSegment segment) {
-        if (this.wireSegments[0] == null) this.wireSegments[0] = segment;
-        else this.wireSegments[1] = segment;
-    }
-
-    @Override
-    public Side getExitSide() {
-        return null;
-    }
-
-    /**
-     * Preferovaný smer odbočky pri jej ťahaní z tohto spájača. Vodič má vychádzať kolmo
-     * na kmeňový vodič (aby ho neprekrýval), pričom znamienko určí poloha kurzora:
-     * nad spájačom TOP, pod BOTTOM, vľavo LEFT, vpravo RIGHT.
-     * <p>
-     * Smer kmeňa sa určuje LOKÁLNE v mieste spájača (posledná úsečka trasy primárneho
-     * segmentu, ktorý podľa {@code createJunction} končí práve na tomto spájači) - nie z
-     * celkového rozsahu segmentu. Segment môže byť totiž zvislo-vodorovná trasa (odbočka
-     * tvaru L) a spájač môže stáť na jej vodorovnom "stube"; vtedy je lokálny smer vodorovný
-     * a odbočka má ísť hore/dole, hoci celý segment je celkovo zvislý.
-     */
-    public Side branchExitFor(double mouseX, double mouseY) {
-        WireSegment trunk = findTrunkSegment();
-        if (trunk == null) return null;
-
-        if (isTrunkSegmentHorizontal(trunk)) {
-            return mouseY < getLayoutY() ? Side.TOP : Side.BOTTOM;
-        }
-        return mouseX < getLayoutX() ? Side.LEFT : Side.RIGHT;
-    }
-
-    /**
-     * Nájde segment kmeňa tesne pri tomto spájači. V novom modeli sú kmeňové vodiče na spájač
-     * napojené cez {@link WireEnd} (kmeň sa v spájači rozdeľuje na dva vodiče), preto sa segment
-     * hľadá cez napojené konce - nie cez vlastné {@code wireSegments}, ktoré sa plnia len priamym
-     * (legacy) spojením segmentu so spájačom. Koniec rozpracovanej odbočky sa preskakuje, aby sa
-     * smer neurčoval z odbočky samej, ale z kmeňa.
-     */
-    private WireSegment findTrunkSegment() {
-        Wire inProgress = Pin.getInProgressWire();
-        for (WireEnd end : this.connectedEnds) {
-            if (inProgress != null && end.getWire() == inProgress) continue;
-            WireSegment seg = end.getWireSegmentForJunction();
-            if (seg != null) return seg;
-        }
-        // legacy: segmenty registrované priamo na spájači
-        if (getPrimaryWireSegment() != null) return getPrimaryWireSegment();
-        return getSecondaryWireSegment();
-    }
-
-    /**
-     * {@code true} ak je lokálny smer kmeňa v mieste spájača vodorovný. Rozhoduje úsečka trasy
-     * tesne pri konci, ktorý sa dotýka spájača: pri {@code startJoint} je to prvá úsečka trasy,
-     * pri {@code endJoint} zase posledná.
-     */
-    private boolean isTrunkSegmentHorizontal(WireSegment segment) {
-        for (WireEnd end : this.connectedEnds) {
-            if (end.getWireSegmentForJunction() != segment) continue;
-            if (segment.getStartJoint() == end) return isFirstPieceHorizontal(segment);
-            if (segment.getEndJoint() == end) return isLastPieceHorizontal(segment);
-        }
-        return isLastPieceHorizontal(segment);
-    }
-
-    /** {@code true} ak je prvá úsečka trasy segmentu vodorovná (úsečka opúšťajúca spájač). */
-    private static boolean isFirstPieceHorizontal(WireSegment segment) {
-        List<Double> points = segment.getRoutedPoints();
-        for (int i = 0; i + 3 < points.size(); i += 2) {
-            double x1 = points.get(i);
-            double y1 = points.get(i + 1);
-            double x2 = points.get(i + 2);
-            double y2 = points.get(i + 3);
-            double lenX = Math.abs(x2 - x1);
-            double lenY = Math.abs(y2 - y1);
-            if (lenX == 0 && lenY == 0) continue;
-            return lenX >= lenY;
-        }
-        // žiadna použiteľná trasa - pôvodná heuristika z celkového rozsahu segmentu
-        return Math.abs(segment.getEndX() - segment.getStartX()) >= Math.abs(segment.getEndY() - segment.getStartY());
-    }
-
-    /** {@code true} ak je posledná úsečka trasy segmentu vodorovná (úsečka vchádzajúca do spájača). */
-    private static boolean isLastPieceHorizontal(WireSegment segment) {
-        List<Double> points = segment.getRoutedPoints();
-        for (int i = points.size() - 4; i >= 0; i -= 2) {
-            double x1 = points.get(i);
-            double y1 = points.get(i + 1);
-            double x2 = points.get(i + 2);
-            double y2 = points.get(i + 3);
-            double lenX = Math.abs(x2 - x1);
-            double lenY = Math.abs(y2 - y1);
-            if (lenX == 0 && lenY == 0) continue;
-            return lenX >= lenY;
-        }
-        // žiadna použiteľná trasa - pôvodná heuristika z celkového rozsahu segmentu
-        return Math.abs(segment.getEndX() - segment.getStartX()) >= Math.abs(segment.getEndY() - segment.getStartY());
+    protected Group generateJointGraphic(double radius) {
+        return new Group();
     }
 
     @Override
@@ -387,41 +457,12 @@ public class WireJunction extends Joint implements Connectable {
 
     @Override
     public void delete() {
-        if (this.removed) return;
-        getWire().removeJunction(this);
+        destroy(this);
     }
 
     @Override
     public Item getOwnerItem() {
         return null;
-    }
-
-    void addWireEnd(WireEnd end) {
-        if (!connectedEnds.contains(end)) connectedEnds.add(end);
-    }
-
-    void removeWireEnd(WireEnd end) {
-        connectedEnds.remove(end);
-    }
-
-    List<WireEnd> getConnectedEnds() {
-        return connectedEnds;
-    }
-
-    /**
-     * Vodiče, ktoré sa tohto spájača dotýkajú (konce pripojené naň + hostiteľ, prípadne
-     * legacy kmeň, ktorým spájač len prechádza). Každý vodič je v zozname najraz.
-     * Používa kopírovanie výberu na uzáver vodičov cez spájače.
-     */
-    public List<Wire> getConnectedWires() {
-        List<Wire> wires = new ArrayList<>();
-        for (WireEnd end : new ArrayList<>(connectedEnds)) {
-            Wire wire = end.getWire();
-            if (wire != null && !wires.contains(wire)) wires.add(wire);
-        }
-        Wire host = this.getWire();
-        if (host != null && !wires.contains(host)) wires.add(host);
-        return wires;
     }
 
     @Override
@@ -443,9 +484,22 @@ public class WireJunction extends Joint implements Connectable {
     }
 
     @Override
+    public Side getExitSide() {
+        return null;
+    }
+
+    @Override
     public Potential getPotential() {
         Pin pin = findConnectedPin();
         if (pin != null) return pin.getPotential();
         return null;
+    }
+
+    public boolean isRemoved() {
+        return this.removed;
+    }
+
+    void markRemoved() {
+        this.removed = true;
     }
 }

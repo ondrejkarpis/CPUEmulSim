@@ -29,12 +29,10 @@ import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Selectable;
-import sk.uniza.fri.cp.SchematicSim.Side;
 import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
-import sk.uniza.fri.cp.SchematicSim.Wire.WireSegment;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.lang.reflect.InvocationTargetException;
@@ -330,102 +328,185 @@ public class SchematicSheet extends ScrollPane {
 
     /**
      * Nastavenie spracovania udalostí pre pripájanie vodičov na iné vodiče.
-     * Zachytáva uvoľnenie myši na úrovni scény, aby sa detekovalo, keď užívateľ
-     * pustí vodič na segmente iného vodiča - vytvorí sa spájač (WireJunction).
+     * Zachytáva uvoľnenie myši na úrovni scény (capture), aby sa detekovalo, keď užívateľ
+     * pustí rozpracovaný vodič (alebo uchopený koniec) na pine/spájači/vodiči.
+     * <p>
+     * Poradie riešenia pri pustení: pin/súčiastka (vracia sa - dokončia to vlastné
+     * handlery) → spájač → voľný koniec iného vodiča → vodič (rozdelenie) →
+     * najbližší vodič na prázdnej ploche → nič (zdrojový handler zruší/dokončí).
      */
     private void setupWireToWireHandler() {
         this.sceneProperty().addListener((obs, oldScene, newScene) -> {
-            if (newScene != null) {
-                newScene.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
-                    Wire inProgress = Pin.getInProgressWire();
-                    if (inProgress == null) return;
+            if (newScene == null) return;
+            newScene.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
+                Wire inProgress = Pin.getInProgressWire();
+                WireEnd grabbed = WireEnd.getGrabbedEnd();
+                if (inProgress == null && grabbed == null) return;
 
-                    // pickResult vráti najhlbší hite (cierka spájača / polyline segmentu),
-                    // preto prechádzame rodičovacou reťazou až na WireJunction/WireSegment.
-                    // Koniec odbočky (WireEnd) s napojeným spájačom sa tiež berie ako spájač.
-                    Node picked = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
-                    WireSegment segmentTarget = null;
-                    WireJunction junctionTarget = null;
-                    Node target = picked;
-                    while (target != null && segmentTarget == null && junctionTarget == null) {
-                        if (target instanceof WireSegment) {
-                            segmentTarget = (WireSegment) target;
-                        } else if (target instanceof WireJunction) {
-                            junctionTarget = (WireJunction) target;
-                        } else if (target instanceof WireEnd) {
-                            junctionTarget = ((WireEnd) target).getJunction();
-                        }
-                        target = target.getParent();
+                Wire own = inProgress != null ? inProgress : grabbed.getWire();
+                WireEnd freeEnd = inProgress != null ? inProgress.catchFreeEnd() : grabbed;
+
+                Node picked = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
+
+                // pustenie na pin/súčiastku necháme na handlery prvkov (MouseDragEvent sa
+                // stará o pripojenie, zdrojový handler o dokončenie/zrušenie ťahu)
+                if (findAncestor(picked, Pin.class) != null || findAncestor(picked, GateSymbol.class) != null) {
+                    return;
+                }
+
+                Point2D sheetXY = sceneToSheet(event.getSceneX(), event.getSceneY());
+                GridSystem grid = gridSystem;
+                double gridMin = grid.getSizeMin();
+                Point2D snapPoint = new Point2D(
+                        Math.round(sheetXY.getX() / gridMin) * gridMin,
+                        Math.round(sheetXY.getY() / gridMin) * gridMin);
+
+                // 1) spájač (viditeľný, alebo koniec vodiča na spájači)
+                WireJunction junctionTarget = findJunctionTarget(picked);
+                if (junctionTarget == null) {
+                    // neviditeľný zlom myšou nebuchne - hľadá sa geometricky v okolí
+                    junctionTarget = WireJunction.findNear(this, sheetXY, gridMin / 2.0);
+                }
+                if (junctionTarget != null) {
+                    if (inProgress != null && junctionTarget == inProgress.getStartJunction()) {
+                        // pustenie späť na vlastný počiatočný spájač = zrušenie ťahu
+                        Pin.finishInProgressWire();
+                        event.consume();
+                        return;
                     }
-
-                    Point2D sheetXY = layersManager.getLayer("background")
-                            .sceneToLocal(event.getSceneX(), event.getSceneY());
-
-                    // Tenký segment sa pri pustení ľahko minie (pick zasiahne iba ťahkú čiaru),
-                    // preto ak pick netrafil žiadny vodič/spájač a myš je na prázdnej ploche,
-                    // hľadáme najbližší segment v okolí pustenia s toleranciou podľa priblíženia.
-                    if (segmentTarget == null && junctionTarget == null && isOnWireDropSurface(picked)) {
-                        segmentTarget = findWireSegmentNear(sheetXY.getX(), sheetXY.getY(), inProgress);
+                    if (junctionTarget == freeEnd.getJunction()) {
+                        // pustenie na vlastný spájač = nič nerobíme
+                        return;
                     }
+                    freeEnd.connect(junctionTarget);
+                    finishWireDrop(inProgress);
+                    event.consume();
+                    return;
+                }
 
-                    if (segmentTarget != null) {
-                        Wire targetWire = segmentTarget.getWire();
-                        if (targetWire == inProgress) {
-                            // pustenie na vlastný segment = pustenie "do prázdna" - ukončíme bez pripojenia
-                            if (!inProgress.areBothEndsConnected()) {
-                                inProgress.delete();
-                            }
-                            Pin.finishInProgressWire();
-                            event.consume();
-                            return;
-                        }
+                // 2) voľný koniec iného vodiča v okolí = spoločný spájač
+                WireJunction shared = findFreeEndNear(own, snapPoint, gridMin / 2.0);
+                if (shared != null) {
+                    freeEnd.connect(shared);
+                    finishWireDrop(inProgress);
+                    event.consume();
+                    return;
+                }
 
-                        WireJunction junction = connectToWireAt(targetWire, sheetXY.getX(), sheetXY.getY());
-                        if (junction != null) {
-                            if (junction == inProgress.getStartJunction()) {
-                                // pustenie späť na vlastný počiatočný spájač = zrušenie ťahu
-                                if (!inProgress.areBothEndsConnected()) {
-                                    inProgress.delete();
-                                }
-                                Pin.finishInProgressWire();
-                                event.consume();
-                                return;
-                            }
-                            inProgress.catchFreeEnd().connect(junction);
-                            finishWireDrop(inProgress);
-                            event.consume();
-                        }
-                    } else if (junctionTarget != null) {
-                        WireJunction junction = junctionTarget;
-                        if (junction.getWire() == inProgress) {
-                            if (!inProgress.areBothEndsConnected()) {
-                                inProgress.delete();
-                            }
-                            Pin.finishInProgressWire();
-                            event.consume();
-                            return;
-                        }
-                        if (junction == inProgress.getStartJunction()) {
-                            if (!inProgress.areBothEndsConnected()) {
-                                inProgress.delete();
-                            }
-                            Pin.finishInProgressWire();
-                            event.consume();
-                            return;
-                        }
-                        inProgress.catchFreeEnd().connect(junction);
+                // 3) pustenie priamo na vodič = rozdelenie v mieste pustenia
+                Wire targetWire = findAncestor(picked, Wire.class);
+                if (targetWire != null) {
+                    if (targetWire == own) {
+                        // pustenie na vlastný vodič = ukončenie bez pripojenia
+                        Pin.finishInProgressWire();
+                        WireEnd.finishGrab();
+                        return;
+                    }
+                    WireJunction junction = targetWire.splitAtPoint(sheetXY);
+                    if (junction != null) {
+                        freeEnd.connect(junction);
                         finishWireDrop(inProgress);
                         event.consume();
+                        return;
                     }
-                });
-            }
+                }
+
+                // 4) pustenie na prázdnej ploche v okolí neďalekého vodiča
+                if (isOnWireDropSurface(picked)) {
+                    Wire nearest = findNearestWire(own, sheetXY);
+                    if (nearest != null) {
+                        WireJunction junction = nearest.splitAtPoint(sheetXY);
+                        if (junction != null) {
+                            freeEnd.connect(junction);
+                            finishWireDrop(inProgress);
+                            event.consume();
+                            return;
+                        }
+                    }
+                }
+                // nič - zdrojový handler ťah dokončí alebo zruší
+            });
         });
     }
 
+    private static <T extends Node> T findAncestor(Node node, Class<T> type) {
+        Node current = node;
+        while (current != null) {
+            if (type.isInstance(current)) return type.cast(current);
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private WireJunction findJunctionTarget(Node picked) {
+        Node target = picked;
+        while (target != null) {
+            if (target instanceof WireJunction) {
+                WireJunction junction = (WireJunction) target;
+                if (!junction.isRemoved()) return junction;
+                return null;
+            }
+            if (target instanceof WireEnd) {
+                WireJunction junction = ((WireEnd) target).getJunction();
+                if (junction != null) return junction;
+            }
+            if (target instanceof Pin || target instanceof Wire) return null;
+            target = target.getParent();
+        }
+        return null;
+    }
+
+    /**
+     * Hľadá voľný koniec iného vodiča v okolí bodu; ak sa nájde, vytvorí v bode
+     * spoločný spájač a pripojí naň oba voľné konce (dva vodiče sa tak stretnú
+     * v jednom bode bez zbytočného rozdelenia).
+     */
+    private WireJunction findFreeEndNear(Wire exclude, Point2D point, double tolerance) {
+        for (Wire wire : layersManager.getWires()) {
+            if (wire == exclude || wire.isPreview()) continue;
+            for (WireEnd end : wire.getEnds()) {
+                if (end.isConnected()) continue;
+                if (end.getConnectionPoint().distance(point) <= tolerance) {
+                    WireJunction junction = WireJunction.at(this, point.getX(), point.getY());
+                    end.connect(junction);
+                    return junction;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Najbližší vodič (okrem {@code exclude}) k bodu - pre pustenie konca vodiča
+     * v okolí na prázdnej ploche. Tolerancia sa pri priblížení škáluje, aby sa
+     * tenký vodič ľahšie trafili aj pri zmenšenej ploche.
+     */
+    private Wire findNearestWire(Wire exclude, Point2D sheetXY) {
+        double scale = Math.max(getAppliedScale(), 0.5);
+        double tolerance = Math.min(
+                Math.max(WIRE_DROP_TOLERANCE / scale, WIRE_DROP_TOLERANCE),
+                gridSystem.getSizeMin());
+
+        Wire bestWire = null;
+        double bestDist = Double.MAX_VALUE;
+        for (Wire wire : layersManager.getWires()) {
+            if (wire == exclude) continue;
+            double dist = wire.distanceToPoint(sheetXY);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestWire = wire;
+            }
+        }
+        if (bestWire == null || bestDist > tolerance) return null;
+        return bestWire;
+    }
+
     private void finishWireDrop(Wire inProgress) {
-        inProgress.setMouseTransparent(false);
-        inProgress.setOpacity(1);
-        Pin.finishInProgressWire();
+        if (inProgress != null) {
+            Pin.finishInProgressWire();
+        } else {
+            WireEnd.finishGrab();
+        }
     }
 
     /**
@@ -444,56 +525,6 @@ public class SchematicSheet extends ScrollPane {
             node = node.getParent();
         }
         return false;
-    }
-
-    /**
-     * Najbližší segment ľubovoľného vodiča (okrem {@code exclude}) vo vzdialenosti
-     * najviac {@link #WIRE_DROP_TOLERANCE} px od bodu. Tolerancia sa pri priblížení
-     * škáluje, aby sa tenký vodič ľahšie trafili aj pri zmenšenej ploche.
-     *
-     * @return Segment najbližšieho vodiča, alebo null ak je bod príliš ďaleko.
-     */
-    private WireSegment findWireSegmentNear(double sheetX, double sheetY, Wire exclude) {
-        double scale = Math.max(getAppliedScale(), 0.5);
-        double tolerance = Math.min(
-                Math.max(WIRE_DROP_TOLERANCE / scale, WIRE_DROP_TOLERANCE),
-                gridSystem.getSizeMin());
-        Point2D point = new Point2D(sheetX, sheetY);
-
-        Wire bestWire = null;
-        double bestDist = Double.MAX_VALUE;
-        for (Wire wire : layersManager.getWires()) {
-            if (wire == exclude) continue;
-            double dist = wire.distanceToNearestSegment(point);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestWire = wire;
-            }
-        }
-        if (bestWire == null || bestDist > tolerance) return null;
-        return bestWire.findSegmentNear(point, tolerance);
-    }
-
-    /**
-     * Vytvorí spájač na najbližšom segmente vodiča ku danej pozícii a pripojí naň nový vodič.
-     * Ak sa v blízkosti už spájač nachádza, vráti ten (predchádza sa duplicitným spájačom).
-     */
-    private WireJunction connectToWireAt(Wire targetWire, double sheetX, double sheetY) {
-        if (targetWire == null) return null;
-
-        WireJunction near = findJunctionNear(targetWire, sheetX, sheetY);
-        if (near != null) return near;
-
-        GridSystem grid = gridSystem;
-        int gridX = (int) Math.round(sheetX / grid.getSizeX());
-        int gridY = (int) Math.round(sheetY / grid.getSizeY());
-        Point2D snapPos = grid.gridToPixel(gridX, gridY);
-
-        return targetWire.createJunction(snapPos);
-    }
-
-    private WireJunction findJunctionNear(Wire wire, double x, double y) {
-        return wire.findJunctionNear(x, y);
     }
 
     /**
@@ -679,13 +710,8 @@ public class SchematicSheet extends ScrollPane {
         }
 
         for (Wire wire : collectCopyableWires(selectedWires)) {
-            List<Point2D> joints = new ArrayList<>();
-            for (Joint joint : wire.getJoints()) {
-                joints.add(new Point2D(joint.getLayoutX(), joint.getLayoutY()));
-            }
-            clipboardWires.add(new CopiedWire(wire.getColor(), wire.getBranchExit(),
-                    new CopiedEnd[]{copyEnd(wire.getEnds()[0]), copyEnd(wire.getEnds()[1])},
-                    joints));
+            clipboardWires.add(new CopiedWire(wire.getColor(),
+                    new CopiedEnd[]{copyEnd(wire.getEnds()[0]), copyEnd(wire.getEnds()[1])}));
         }
     }
 
@@ -727,11 +753,10 @@ public class SchematicSheet extends ScrollPane {
      * Vodiče, ktoré sa majú skopírovať - uzáver označených vodičov cez spájače.
      * <p>
      * Postup: zo začiatku sa vezmú označené vodiče spĺňajúce {@link #isWireCopyable}.
-     * Potom sa v uzávere opakovane: doplnia vodiče dotýkajúce sa spájačov už vybraných
-     * vodičov (spájač potrebuje hostiteľa, susedia z rovnakej skupiny nesmú chýbať) a
-     * odhodia sa vodiče, ktorých spájač sa nekopíruje (vedie mimo skupiny) alebo ktoré
-     * by na spájači ostali osamotené. Raz odhodený vodič sa už znova nepridá, takže
-     * cyklus je vždy konečný.
+     * Potom sa v uzávere opakovane: doplnia sa vodiče dotýkajúce sa spájačov už vybraných
+     * vodičov (susedia z rovnakej skupiny nesmú chýbať, inak by po prilepení chýbala
+     * odbočka) a odhodia sa vodiče, na ktorých by po prilepení ostal osamotený jediný
+     * koniec. Raz odhodený vodič sa už znova nepridá, takže cyklus je vždy konečný.
      */
     private List<Wire> collectCopyableWires(List<Wire> selectedWires) {
         Set<GateSymbol> copiedGates = new HashSet<>();
@@ -769,25 +794,9 @@ public class SchematicSheet extends ScrollPane {
                 changed = true;
             }
 
-            // odhodenie: koniec na spájači, ktorého hostiteľ sa nekopíruje, lebo vedie
-            // mimo kopírovanej skupiny (alebo už bol odhodený)
-            List<Wire> remove = new ArrayList<>();
-            for (Wire wire : result) {
-                if (remove.contains(wire)) continue;
-                for (WireEnd end : wire.getEnds()) {
-                    WireJunction junction = end.getJunction();
-                    if (junction == null) continue;
-                    Wire host = junction.getWire();
-                    if (host != null && (dropped.contains(host)
-                            || (!result.contains(host) && !isWireCopyable(host, copiedGates)))) {
-                        remove.add(wire);
-                        break;
-                    }
-                }
-            }
-
             // odhodenie: spájač, na ktorom by po prilepení zostal osamotený jediný koniec
             // (druhý vodič vedie mimo skupiny) - vodič by inak visel na spájači bez protistrany
+            List<Wire> remove = new ArrayList<>();
             for (WireJunction junction : junctionsOf(result)) {
                 List<Wire> atJunction = junction.getConnectedWires();
                 Wire lone = null;
@@ -890,7 +899,6 @@ public class SchematicSheet extends ScrollPane {
             Wire wire = new Wire(this);
             addItem(wire);
             wire.changeColor(copied.color);
-            if (copied.branchExit != null) wire.setBranchExit(copied.branchExit);
             pastedWires.add(wire);
 
             WireEnd[] ends = wire.getEnds();
@@ -906,9 +914,6 @@ public class SchematicSheet extends ScrollPane {
                     ends[i].moveTo(x, y);
                     if (source.junction) pendingEnds.add(new JunctionEnd(ends[i], x, y));
                 }
-            }
-            for (Point2D joint : copied.joints) {
-                wire.splitLastSegment().moveTo(joint.getX() + deltaPx, joint.getY() + deltaPy);
             }
         }
 
@@ -929,7 +934,8 @@ public class SchematicSheet extends ScrollPane {
     /**
      * Pripojenie konca vodiča na spájač v danej pozícii. Spájače sa zdieľajú cez
      * {@code hubByKey} (kľúč = poloha), takže všetky konce v tom istom bode dostanú
-     * jeden objekt. Logika zodpovedá {@link SchemeLoader} pri načítaní súboru.
+     * jeden objekt. Ak vodič prilepený v tomto bode prechádza, rozdelí sa; inak sa
+     * založí samostatný spájač. Logika zodpovedá {@link SchemeLoader} pri načítaní.
      */
     private void resolveJunctionEnd(JunctionEnd pending, List<Wire> pastedWires,
                                     Map<Long, WireJunction> hubByKey) {
@@ -945,19 +951,22 @@ public class SchematicSheet extends ScrollPane {
         // existujúci spájač presne v bode (založený iným koncom tohto prilepenia)
         for (Wire wire : pastedWires) {
             if (wire == pending.end.getWire()) continue;
-            WireJunction existing = wire.findJunctionAt(position);
-            if (existing != null) {
-                hubByKey.put(key, existing);
-                pending.end.connect(existing);
-                return;
+            for (WireEnd end : wire.getEnds()) {
+                WireJunction existing = end.getJunction();
+                if (existing != null && junctionKey(existing.getLayoutX(), existing.getLayoutY()) == key) {
+                    hubByKey.put(key, existing);
+                    pending.end.connect(existing);
+                    return;
+                }
             }
         }
 
         // vodič prilepený v tomto bode prechádza - spájač sa založí rozdelením
+        double grid = gridSystem.getSizeMin();
         for (Wire wire : pastedWires) {
             if (wire == pending.end.getWire()) continue;
-            if (wire.findSegmentNear(position) != null) {
-                WireJunction created = wire.createJunction(position);
+            if (wire.distanceToPoint(position) <= grid / 2.0) {
+                WireJunction created = wire.splitAtPoint(position);
                 if (created != null) {
                     hubByKey.put(key, created);
                     pending.end.connect(created);
@@ -966,12 +975,10 @@ public class SchematicSheet extends ScrollPane {
             }
         }
 
-        // samostatný spájač na vodiči tohto konca (kmeň končí priamo na spájači)
-        WireJunction standalone = pending.end.getWire().createStandaloneHub(position);
-        if (standalone != null && !standalone.isRemoved()) {
-            hubByKey.put(key, standalone);
-            pending.end.connect(standalone);
-        }
+        // samostatný spájač (kmeň končí priamo na spájači)
+        WireJunction standalone = WireJunction.at(this, pending.x, pending.y);
+        hubByKey.put(key, standalone);
+        pending.end.connect(standalone);
     }
 
     /** Kľúč polohy spájača pre zdieľanie medzi koncami rôznych vodičov. */
@@ -1132,21 +1139,18 @@ public class SchematicSheet extends ScrollPane {
     }
 
     /**
-     * Snímka jedného kopírovaného vodiča - farba, preferovaný smer odbočky, oba konce
-     * (popis vyššie) a pozície zlomov. Všetky súradnice sú v layoutových súradniciach
-     * plochy a pri prilepení sa posunú o rovnaký delta ako súčiastky.
+     * Snímka jedného kopírovaného vodiča - farba a oba konce (popis vyššie).
+     * Všetky súradnice sú v layoutových súradniciach plochy a pri prilepení sa
+     * posunú o rovnaký delta ako súčiastky. Vodič je vždy priamy úsečný, takže
+     * jeho tvar sa obnoví z koncov - netreba ukladať zlomy.
      */
     private static final class CopiedWire {
         final Color color;
-        final Side branchExit;
         final CopiedEnd[] ends;
-        final List<Point2D> joints;
 
-        CopiedWire(Color color, Side branchExit, CopiedEnd[] ends, List<Point2D> joints) {
+        CopiedWire(Color color, CopiedEnd[] ends) {
             this.color = color;
-            this.branchExit = branchExit;
             this.ends = ends;
-            this.joints = joints;
         }
     }
 

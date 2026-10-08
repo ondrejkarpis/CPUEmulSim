@@ -10,8 +10,6 @@ import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
-import sk.uniza.fri.cp.SchematicSim.Side;
-import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireEnd;
 import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
@@ -97,29 +95,11 @@ public class SchemeLoader {
         for (Wire wire : sheet.getWires()) {
             Element wireElement = new Element("Wire");
             wireElement.setAttribute("color", colorToHex(wire.getColor()));
-            if (wire.getBranchExit() != null) {
-                wireElement.setAttribute("branchExit", wire.getBranchExit().name());
-            }
 
             WireEnd[] ends = wire.getEnds();
             appendWireEnd(wireElement, "start", ends[0]);
             appendWireEnd(wireElement, "end", ends[1]);
 
-            Element jointsElement = new Element("Joints");
-            for (Joint joint : wire.getJoints()) {
-                Element jointElement = new Element("joint");
-
-                Element x = new Element("x");
-                x.addContent(Double.toString(joint.getLayoutX()));
-                jointElement.addContent(x);
-
-                Element y = new Element("y");
-                y.addContent(Double.toString(joint.getLayoutY()));
-                jointElement.addContent(y);
-
-                jointsElement.addContent(jointElement);
-            }
-            wireElement.addContent(jointsElement);
             wiresElement.addContent(wireElement);
         }
         rootElement.addContent(wiresElement);
@@ -274,8 +254,8 @@ public class SchemeLoader {
     }
 
     /**
-     * Načítanie jedného vodiča: pripojenie koncov na piny, rozdelanie zlomov a prvý pokus
-     * o vyriešenie koncov na spájačoch. Vracia záznam pre prípadný druhý prechod, alebo
+     * Načítanie jedného vodiča: pripojenie koncov na piny a prvý pokus o vyriešenie
+     * koncov na spájačoch. Vracia záznam pre prípadný druhý prechod, alebo
      * {@code null} ak sa vodič nepodarilo načítať.
      */
     private static WireEntry loadWire(SchematicSheet sheet, Element wireElement,
@@ -288,29 +268,10 @@ public class SchemeLoader {
         sheet.addItem(wire);
         wire.changeColor(Color.valueOf(colorFromHex(wireElement.getAttributeValue("color"))));
 
-        // preferovaný smer prvej úsečky (ulovené pri ťahaní odbočky zo spájača) - vrátime ho,
-        // aby router po načítaní zachoval pôvodný tvar (L) a neprehupol ho do predvoleného Z
-        String branchExit = wireElement.getAttributeValue("branchExit");
-        if (branchExit != null && !branchExit.isEmpty()) {
-            try {
-                wire.setBranchExit(Side.valueOf(branchExit));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-
         WireEnd[] ends = wire.getEnds();
 
         connectPinEnd(ends[0], startElement, gatesById);
         connectPinEnd(ends[1], endElement, gatesById);
-
-        Element jointsElement = wireElement.getChild("Joints");
-        if (jointsElement != null) {
-            for (Element jointElement : jointsElement.getChildren("joint")) {
-                double x = Double.parseDouble(jointElement.getChildText("x"));
-                double y = Double.parseDouble(jointElement.getChildText("y"));
-                wire.splitLastSegment().moveTo(x, y);
-            }
-        }
 
         resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey);
         resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey);
@@ -360,13 +321,12 @@ public class SchemeLoader {
     /**
      * Pripojenie konca vodiča, ktorý je v súbore uložený ako spájač (junction) na iný vodič.
      * <p>
-     * V novom modeli sa kmeňový vodič v mieste spájača rozdeľuje na DVA vodiče a všetky
-     * konce zdieľajúce rovnaký bod sa napájajú na jeden spoločný spájač (hub) - preto sa
-     * spájače najprv zdieľajú cez mapu {@code hubByKey} (všetci pripojení v danom bode
-     * dostanú ten istý objekt). Ak už v bode hub existuje, pripojí sa naň.
+     * Všetky konce zdieľajúce rovnaký bod sa napájajú na jeden spoločný spájač (hub) -
+     * preto sa spájače najprv zdieľajú cez mapu {@code hubByKey} (všetci pripojení
+     * v danom bode dostanú ten istý objekt). Ak už v bode hub existuje, pripojí sa naň.
      * <p>
-     * Pre staré súbory (kde kmeň cez bod len prechádza) sa ako poistka hľadá kmeňový vodič
-     * prechádzajúci bodom a na ňom sa spájač vytvorí rozdeľujúcim {@code createJunction}.
+     * Pre staré súbory (kde kmeň cez bod len prechádza) sa ako poistka hľadá vodič
+     * prechádzajúci bodom a na ňom sa spájač vytvorí rozdeľujúcim {@code splitAtPoint}.
      *
      * @return true ak sa koniec podarilo pripojiť na spájač.
      */
@@ -389,29 +349,32 @@ public class SchemeLoader {
         Point2D pos = new Point2D(x, y);
         long key = keyOf(x, y);
 
-        // nový model: spájač už môže byť vytvorený iným koncom v rovnakom bode
+        // spájač už môže byť vytvorený iným koncom v rovnakom bode
         WireJunction shared = hubByKey.get(key);
         if (shared != null && !shared.isRemoved()) {
             end.connect(shared);
             return true;
         }
 
-        // existujúci hub presne v bode (najmä starý formát, kde hub zapísal prvý z koncov)
+        // existujúci hub presne v bode (napr. zápísaný prvým koncom)
         for (Wire loadedWire : loadedWires) {
             if (loadedWire == end.getWire()) continue;
-            WireJunction existing = loadedWire.findJunctionAt(pos);
-            if (existing != null) {
-                hubByKey.put(key, existing);
-                end.connect(existing);
-                return true;
+            for (WireEnd other : loadedWire.getEnds()) {
+                WireJunction existing = other.getJunction();
+                if (existing != null && keyOf(existing.getLayoutX(), existing.getLayoutY()) == key) {
+                    hubByKey.put(key, existing);
+                    end.connect(existing);
+                    return true;
+                }
             }
         }
 
-        // starý formát: kmeňový vodič len prechádza bodom - rozdelí sa na dva vodiče
+        // kmeňový vodič len prechádza bodom - rozdelí sa na dva vodiče
+        double grid = end.getSheet().getGrid().getSizeMin();
         for (Wire loadedWire : loadedWires) {
             if (loadedWire == end.getWire()) continue;
-            if (loadedWire.findSegmentNear(pos) != null) {
-                WireJunction junction = loadedWire.createJunction(pos);
+            if (loadedWire.distanceToPoint(pos) <= grid / 2.0) {
+                WireJunction junction = loadedWire.splitAtPoint(pos);
                 if (junction != null) {
                     hubByKey.put(key, junction);
                     end.connect(junction);
@@ -420,15 +383,11 @@ public class SchemeLoader {
             }
         }
 
-        // nový model (koniec je na mieste, kde vodič končí): vytvoríme samostatný hub
-        WireJunction standalone = end.getWire().createStandaloneHub(pos);
-        if (standalone != null && !standalone.isRemoved()) {
-            hubByKey.put(key, standalone);
-            end.connect(standalone);
-            return true;
-        }
-
-        return false;
+        // koniec je na mieste, kde žiadny vodič neprechádza: samostatný hub
+        WireJunction standalone = WireJunction.at(end.getSheet(), x, y);
+        hubByKey.put(key, standalone);
+        end.connect(standalone);
+        return true;
     }
 
     /**

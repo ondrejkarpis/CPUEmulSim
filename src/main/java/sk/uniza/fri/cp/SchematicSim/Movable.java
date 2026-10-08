@@ -7,7 +7,6 @@ import javafx.scene.Cursor;
 import javafx.scene.input.MouseEvent;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
-import sk.uniza.fri.cp.SchematicSim.Wire.Joint;
 
 /**
  * Objekt s ktorým je možné pohybovať pomocou kurzora na ploche schémy, so snapovaním na mriežku.
@@ -56,15 +55,8 @@ public abstract class Movable extends HighlightGroup {
         int gridX;
         int gridY;
 
-        if (event.getSource() instanceof Joint) {
-            // jointy (zlomy vodiča) chytáme za stred
-            Point2D sheetXY = sheet.sceneToSheet(event.getSceneX(), event.getSceneY());
-            gridX = (int) (Math.round(sheetXY.getX() / grid.getSizeX()) * grid.getSizeX()) / grid.getSizeX();
-            gridY = (int) (Math.round(sheetXY.getY() / grid.getSizeY()) * grid.getSizeY()) / grid.getSizeY();
-        } else {
-            gridX = (int) (Math.round((event.getSceneX() - nodeOffsetX) / grid.getSizeX() / sheet.getAppliedScale()) * grid.getSizeX()) / grid.getSizeX();
-            gridY = (int) (Math.round((event.getSceneY() - nodeOffsetY) / grid.getSizeY() / sheet.getAppliedScale()) * grid.getSizeY()) / grid.getSizeY();
-        }
+        gridX = (int) (Math.round((event.getSceneX() - nodeOffsetX) / grid.getSizeX() / sheet.getAppliedScale()) * grid.getSizeX()) / grid.getSizeX();
+        gridY = (int) (Math.round((event.getSceneY() - nodeOffsetY) / grid.getSizeY() / sheet.getAppliedScale()) * grid.getSizeY()) / grid.getSizeY();
 
         if (gridPosX != gridX || gridPosY != gridY) {
             if (gridX < 0) gridX = 0;

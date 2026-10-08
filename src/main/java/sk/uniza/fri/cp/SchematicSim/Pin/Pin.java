@@ -62,24 +62,22 @@ public abstract class Pin extends Group implements Connectable {
         if (!event.isPrimaryButtonDown()) return;
         if (creatingWire != null) {
             Point2D sheetXY = owner.getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-            creatingWire.catchFreeEnd().moveTo(sheetXY.getX(), sheetXY.getY());
+            creatingWire.updateCreationDrag(sheetXY.getX(), sheetXY.getY());
+        } else if (WireEnd.getGrabbedEnd() != null) {
+            Point2D sheetXY = owner.getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
+            WireEnd.moveGrabbed(sheetXY.getX(), sheetXY.getY());
         }
         event.consume();
     };
 
     private final EventHandler<MouseEvent> onMouseReleased = event -> {
         if (creatingWire != null) {
-            Wire finished = creatingWire;
-            finished.setMouseTransparent(false);
-            finished.setOpacity(1);
-            creatingWire = null;
-            if (!finished.areBothEndsConnected()) {
-                finished.delete();
-            } else {
-                finished.settleToGrid();
-            }
+            finishInProgressWire();
+            event.consume();
+        } else if (WireEnd.getGrabbedEnd() != null) {
+            WireEnd.finishGrab();
+            event.consume();
         }
-        event.consume();
     };
 
     private final EventHandler<MouseEvent> onMouseDragDetected = event -> {
@@ -87,7 +85,12 @@ public abstract class Pin extends Group implements Connectable {
         if (owner.getSheet() != null && !owner.getSheet().isEditingEnabled()) return;
         startFullDrag();
 
-        beginWireCreation(this);
+        if (this.connectedWireEnd != null) {
+            // obsadený pin: ťah uvoľní koniec z pine a ťahá ho ako náhľad
+            WireEnd.beginGrab(this.connectedWireEnd);
+        } else {
+            beginWireCreation(this);
+        }
 
         event.consume();
     };
@@ -95,25 +98,28 @@ public abstract class Pin extends Group implements Connectable {
     /**
      * Založenie rozpracovaného vodiča z daného pinu (bez natívneho drag gesta - používa to
      * samotný {@link #onMouseDragDetected} aj testy zbernicovej lišty). Vodič sa zaregistruje
-     * ako aktuálny rozpracovaný ({@link #getInProgressWire()}) a pridá na plochu.
+     * ako aktuálny rozpracovaný ({@link #getInProgressWire()}) a pridá na plochu; zároveň sa
+     * zapne L-tvarový náhľad ukotvený na pine (os sa zamkne pri prvom väčšom pohybe myši).
      */
     public static Wire beginWireCreation(Pin source) {
         creatingWire = new Wire(source);
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         source.owner.getSheet().addItem(creatingWire);
+        creatingWire.beginPreview(0, null);
         return creatingWire;
     }
 
     /**
      * Založenie rozpracovaného vodiča z existujúceho spájača (WireJunction) na vodiči.
-     * Umožňuje začínať nové vodiče na existujúcich vodičoch.
+     * Umožňuje začínať nové vodiče na existujúcich vodičoch (odbočky).
      */
     public static Wire beginWireCreation(WireJunction source) {
         creatingWire = new Wire(source);
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         source.getSheet().addItem(creatingWire);
+        creatingWire.beginPreview(0, null);
         return creatingWire;
     }
 
@@ -126,10 +132,25 @@ public abstract class Pin extends Group implements Connectable {
     }
 
     /**
-     * Uvoľnenie rozpracovaného vodiča bez pripojenia (po odmietnutí/odovzdaní na iný komponent).
+     * Ukončenie rozpracovaného vodiča: obnoví jeho vzhľad, vypne náhľad a buď ho
+     * usadí (oba konce pripojené), alebo zruší (niečo ostalo voľné). Volá sa z viacerých
+     * miest pri pustení myši - je idempotentné (prvé volanie vyčistí rozpracovaný stav).
      */
     public static void finishInProgressWire() {
+        Wire wire = creatingWire;
+        if (wire == null) return;
         creatingWire = null;
+
+        wire.endPreview();
+        wire.setMouseTransparent(false);
+        wire.setOpacity(1);
+
+        if (wire.getParent() == null) return;
+        if (!wire.areBothEndsConnected()) {
+            wire.delete();
+        } else {
+            wire.completeCreation();
+        }
     }
 
     private final EventHandler<MouseDragEvent> onMouseDragReleased = event -> {
@@ -138,6 +159,13 @@ public abstract class Pin extends Group implements Connectable {
                 creatingWire.catchFreeEnd().connect(this);
             } else {
                 creatingWire.delete();
+            }
+        } else if (WireEnd.getGrabbedEnd() != null) {
+            // uchopený koniec pustený na pine: zdrojom gesta je PIN (nie WireEnd),
+            // preto sa tu pripojí priamo; pustenie na zdrojovej pine necháme na
+            // tolerančný návrat vo finishGrab (mikro-ťah sa má dať zrušiť)
+            if (this != event.getGestureSource()) {
+                WireEnd.getGrabbedEnd().connect(this);
             }
         } else if (event.getGestureSource() instanceof WireEnd) {
             ((WireEnd) event.getGestureSource()).connect(this);

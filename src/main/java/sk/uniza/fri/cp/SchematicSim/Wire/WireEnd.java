@@ -9,13 +9,20 @@ import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SheetEvent;
-import sk.uniza.fri.cp.SchematicSim.Side;
 
 /**
- * Koniec káblika. Prevzaté z BreadboardSim.Wire.WireEnd - narozdiel od originálu sa pripája
- * priamo na {@link Pin} súčiastky namiesto {@code Socket} na breadboarde.
+ * Koniec vodiča. Pripája sa priamo na {@link Pin} súčiastky alebo na
+ * {@link WireJunction} (bod, v ktorom sa stretávajú dva vodiče).
+ * <p>
+ * V novom modeli je vodič vždy priama úsečka - pohyb konca preto nesmie vznikať
+ * ťahaním samotného jointu ({@link #makeImmovable()}), ale buď
+ * <ul>
+ *     <li>posunutím pinu/vlastníka (listener nižšie → {@link Wire#onEndMoved}),</li>
+ *     <li>posunutím spájača ({@link Wire#onJunctionMoved}),</li>
+ *     <li>alebo uchopením konca myšou (náhľad L-tvaru cez {@link Wire#beginPreview}).</li>
+ * </ul>
  *
- * @author Tomáš Hianik (pôvodný autor), adaptácia Socket -> Pin pre SchematicSim
+ * @author Tomáš Hianik (pôvodný autor), adaptácia pre SchematicSim
  */
 public class WireEnd extends Joint {
 
@@ -24,7 +31,6 @@ public class WireEnd extends Joint {
 
     private double lastPosX = -1;
     private double lastPosY = -1;
-    private boolean moved;
 
     // pri zmene pozície vlastníka pinu (posun súčiastky) sa posunie aj koniec vodiča
     private final ChangeListener<Transform> pinPositionChangeListener = (observable, oldValue, newValue) -> {
@@ -37,7 +43,7 @@ public class WireEnd extends Joint {
         setLayoutX(p.getX() / getSheet().getAppliedScale());
         setLayoutY(p.getY() / getSheet().getAppliedScale());
 
-        getWire().moveJointsWithEnd(this, getLayoutX() - lastPosX, getLayoutY() - lastPosY);
+        getWire().onEndMoved(this, getLayoutX() - lastPosX, getLayoutY() - lastPosY);
 
         lastPosX = getLayoutX();
         lastPosY = getLayoutY();
@@ -52,11 +58,18 @@ public class WireEnd extends Joint {
         setLayoutX(junction.getLayoutX());
         setLayoutY(junction.getLayoutY());
 
-        getWire().moveJointsWithEnd(this, deltaX, deltaY);
+        WireJunction.markDirty(this.junction);
+        getWire().onJunctionMoved(this, deltaX, deltaY);
 
         lastPosX = getLayoutX();
         lastPosY = getLayoutY();
     };
+
+    /** Uchopený koniec vodiča ťahaním z pine (null, ak žiadny). */
+    private static WireEnd grabbedEnd;
+
+    /** Pin, z ktorého bol koniec uchopený - pre návrat pri mikro-ťahu. */
+    private static Pin grabSourcePin;
 
     public WireEnd(SchematicSheet sheet, Wire wire) {
         super(sheet, wire);
@@ -64,67 +77,128 @@ public class WireEnd extends Joint {
         // koniec vodiča sa vykresľuje bez čierneho krúžku - krúžok je len na spájači (WireJunction)
         this.setJointDotVisible(false);
 
-        this.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
-            if (!getSheet().isEditingEnabled()) return;
-            getWire().setMouseTransparent(true);
-            getWire().setOpacity(0.5);
-        });
+        // konce vodičov sa NEŤAHAJÚ priamo (Movable by ich posúval mimo modelu vodiča)
+        makeImmovable();
 
-        this.addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
-            if (!getSheet().isEditingEnabled()) return;
-            startFullDrag();
-            this.moved = true;
-            if (this.pin != null) {
-                this.disconnect();
-                this.setDefaultColor();
-            } else if (this.junction != null) {
-                Pin.beginWireCreation(this.junction);
-            }
-        });
+        this.addEventFilter(MouseEvent.DRAG_DETECTED, this::onDragDetected);
 
         this.addEventFilter(MouseEvent.MOUSE_DRAGGED, event -> {
-            Wire inProgress = Pin.getInProgressWire();
-            if (this.junction != null && inProgress != null) {
+            if (grabbedEnd == this) {
                 Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
-                inProgress.updateBranchDrag(sheetXY.getX(), sheetXY.getY());
-                this.setLayoutX(this.junction.getLayoutX());
-                this.setLayoutY(this.junction.getLayoutY());
+                moveGrabbed(sheetXY.getX(), sheetXY.getY());
+                event.consume();
+                return;
+            }
+            Wire inProgress = Pin.getInProgressWire();
+            if (inProgress != null) {
+                Point2D sheetXY = getSheet().sceneToSheet(event.getSceneX(), event.getSceneY());
+                inProgress.updateCreationDrag(sheetXY.getX(), sheetXY.getY());
                 event.consume();
             }
         });
 
         this.addEventFilter(MouseEvent.MOUSE_RELEASED, event -> {
-            getWire().setMouseTransparent(false);
-            getWire().setOpacity(1);
-            if (!this.moved) getSheet().addSelect(getWire());
-            this.moved = false;
-
-            Wire inProgress = Pin.getInProgressWire();
-            if (inProgress != null) {
-                inProgress.setMouseTransparent(false);
-                inProgress.setOpacity(1);
-                if (!inProgress.areBothEndsConnected()) {
-                    inProgress.delete();
-                }
-                Pin.finishInProgressWire();
-                if (inProgress.areBothEndsConnected()) {
-                    inProgress.settleToGrid();
-                }
+            if (grabbedEnd == this) {
+                finishGrab();
+                event.consume();
+                return;
             }
-
-            event.consume();
+            if (Pin.getInProgressWire() != null) {
+                Pin.finishInProgressWire();
+                event.consume();
+            }
         });
 
         this.incRadius();
     }
 
     /**
-     * Segment vodiča pripojený priamo na tento koniec - používa ho {@link WireJunction}
-     * na určenie smeru kmeňa pri ťahaní odbočky zo spájača.
+     * Začiatok ťahania konca vodiča. Tri prípady podľa toho, kde koniec leží:
+     * <ul>
+     *     <li>na pine - koniec sa odpojí a ťahá sa ako náhľad (zvyšný koniec ostáva ukotvený),</li>
+     *     <li>na spájači - začne sa nová odbočka zo spájača,</li>
+     *     <li>voľný - v mieste konca sa založí spájač a odbočka sa z neho ťahá ďalej
+     *         (pôvodný vodič ostáva stáť; pri zrušení ťahu sa spájač zruší).</li>
+     * </ul>
      */
-    WireSegment getWireSegmentForJunction() {
-        return getPrimaryWireSegment() != null ? getPrimaryWireSegment() : getSecondaryWireSegment();
+    private void onDragDetected(MouseEvent event) {
+        if (!event.isPrimaryButtonDown()) return;
+        if (!getSheet().isEditingEnabled()) return;
+
+        if (this.pin != null) {
+            beginGrab(this);
+            startFullDrag();
+        } else if (this.junction != null) {
+            Pin.beginWireCreation(this.junction);
+            startFullDrag();
+        } else {
+            WireJunction start = WireJunction.at(getSheet(), getConnectionPoint());
+            this.connect(start);
+            Pin.beginWireCreation(start);
+            startFullDrag();
+        }
+        event.consume();
     }
+
+    // === uchopenie konca (grab) ===
+
+    public static void beginGrab(WireEnd end) {
+        if (grabbedEnd != null || end == null) return;
+        grabbedEnd = end;
+        grabSourcePin = end.pin;
+        if (end.pin != null) end.disconnect();
+
+        Wire wire = end.getWire();
+        int index = wire.getEnds()[0] == end ? 0 : 1;
+        wire.setMouseTransparent(true);
+        wire.setOpacity(0.5);
+        wire.beginPreview(1 - index, wire.isHorizontal());
+    }
+
+    public static boolean moveGrabbed(double x, double y) {
+        if (grabbedEnd == null) return false;
+        grabbedEnd.getWire().updateCreationDrag(x, y);
+        return true;
+    }
+
+    /**
+     * Ukončenie uchopenia konca. Obnoví vzhľad vodiča, prípadne vráti koniec na
+     * pôvodný pin (ak sa pri mikro-ťahu znova trafilo do jeho polohy) a naplánuje
+     * usadenie geometrie. Volá sa z viacerých miest - je idempotentné.
+     */
+    public static void finishGrab() {
+        WireEnd end = grabbedEnd;
+        if (end == null) return;
+        grabbedEnd = null;
+        Pin sourcePin = grabSourcePin;
+        grabSourcePin = null;
+
+        Wire wire = end.getWire();
+        if (wire == null) return;
+        wire.endPreview();
+        wire.setMouseTransparent(false);
+        wire.setOpacity(1);
+
+        if (!end.isConnected() && sourcePin != null && !sourcePin.isOccupied()) {
+            Point2D p = sourcePin.getSceneGridPosition();
+            double scale = wire.getSheet().getAppliedScale();
+            double grid = wire.getSheet().getGrid().getSizeMin();
+            if (end.getConnectionPoint().distance(p.getX() / scale, p.getY() / scale) <= grid / 2.0) {
+                end.connect(sourcePin);
+            }
+        }
+        wire.scheduleSettle(end);
+    }
+
+    public static WireEnd getGrabbedEnd() {
+        return grabbedEnd;
+    }
+
+    static boolean isGrabbing(Wire wire) {
+        return grabbedEnd != null && grabbedEnd.getWire() == wire;
+    }
+
+    // === pripojenie / odpojenie ===
 
     public boolean isConnected() {
         return this.pin != null || this.junction != null;
@@ -158,6 +232,7 @@ public class WireEnd extends Joint {
                 lastPosY = getLayoutY();
 
                 this.setColor(this.getWire().getColor().brighter());
+                this.getWire().updateGeometry();
                 this.getWire().updatePotentialNetwork();
             } else {
                 this.setColor(Color.RED);
@@ -184,7 +259,9 @@ public class WireEnd extends Joint {
                 lastPosX = getLayoutX();
                 lastPosY = getLayoutY();
 
+                WireJunction.markDirty(target);
                 this.setColor(this.getWire().getColor().brighter());
+                this.getWire().updateGeometry();
                 this.getWire().updatePotentialNetwork();
             } else {
                 this.setColor(Color.RED);
@@ -204,8 +281,9 @@ public class WireEnd extends Joint {
     }
 
     /**
-     * Prepočítanie pozície konca vodiča podľa aktuálnej polohy pinu (používa sa pri premiestnení
-     * vývodu na súčiastke, kedy sa pin sám presunul - posun tela súčiastky rieši listener vyššie).
+     * Prepočítanie pozície konca vodiča podľa aktuálnej polohy pinu (používa sa pri
+     * premiestnení vývodu na súčiastke, kedy sa pin sám presunul - posun tela súčiastky
+     * rieši listener vyššie).
      */
     public void refreshPosition() {
         if (pin == null) return;
@@ -219,21 +297,16 @@ public class WireEnd extends Joint {
         setLayoutX(p.getX() / getSheet().getAppliedScale());
         setLayoutY(p.getY() / getSheet().getAppliedScale());
 
-        getWire().moveJointsWithEnd(this, getLayoutX() - lastPosX, getLayoutY() - lastPosY);
+        getWire().onEndMoved(this, getLayoutX() - lastPosX, getLayoutY() - lastPosY);
 
         lastPosX = getLayoutX();
         lastPosY = getLayoutY();
     }
 
-    @Override
-    public Side getExitSide() {
-        return pin != null ? pin.getExitSide() : null;
-    }
-
     /**
      * Koniec vodiča sa nikdy nevykresľuje farebným krúžkom - ak by sme {@code setColor} nechali
      * na predkovi, po pripojení by na konci zasvietil krúžok. Krúžky tak ostávajú len na
-     * {@link WireJunction}, kde sa stretávajú dva vodiče.
+     * {@link WireJunction}, kde sa stretávajú tri a viac vodičov.
      */
     @Override
     public void setColor(Color color) {
@@ -241,24 +314,17 @@ public class WireEnd extends Joint {
     }
 
     @Override
-    public void setDefaultColor() {
-        super.setDefaultColor();
-    }
-
-    @Override
-    public void connectWireSegment(WireSegment segment) {
-        this.wireSegments[0] = segment;
-    }
-
-    @Override
     public void delete() {
         this.disconnect();
         super.delete();
-        this.getWire().delete();
+        Wire wire = getWire();
+        if (wire != null) wire.delete();
     }
 
     /**
-     * Odpojenie konca od pinu alebo spájača.
+     * Odpojenie konca od pinu alebo spájaču. Odpojený spájač sa označí na
+     * prepočítanie ({@link WireJunction#markDirty}) - až reconcile rozhodne, či sa
+     * spájač zničí, alebo či sa zvyšné vodiče zlúčia do jednej priamky.
      */
     protected void disconnect() {
         if (this.pin != null) {
@@ -277,36 +343,10 @@ public class WireEnd extends Joint {
             WireJunction orphanedJunction = this.junction;
             this.junction.removeWireEnd(this);
             this.junction = null;
+            WireJunction.markDirty(orphanedJunction);
             orphanedJunction.refreshConnectedWires();
             this.getWire().updatePotentialNetwork();
             this.setDefaultColor();
-
-            // Ak po odpojení tohto konca už na spájači nezostane žiadny pripojený koniec,
-            // spájač osiroteje a zruší sa - kmeňový vodič sa v mieste spájača spojí späť
-            // do jednej priamky. Toto sa stane napr. pri zmazaní odbočky, ktorá spájala
-            // dva iné vodiče: čierny krúžok na kmeňovom vodiči v mieste odpojenej odbočky
-            // sa odstráni.
-            if (orphanedJunction.getConnectedEnds().isEmpty()) {
-                orphanedJunction.delete();
-            }
         }
     }
-
-    /**
-     * Odpojenie konca od spájača BEZ kaskádovej rekurzie - používa sa pri hromadných
-     * operáciách (merge/zničenie hubu), kde nechceme, aby posledné odpojenie spúšťalo
-     * automatické zmazanie spájača (o to sa postará volajúci).
-     */
-    void detachFromJunction() {
-        if (this.junction == null) return;
-        this.junction.layoutXProperty().removeListener(junctionPositionChangeListener);
-        this.junction.layoutYProperty().removeListener(junctionPositionChangeListener);
-        WireJunction orphanedJunction = this.junction;
-        this.junction.removeWireEnd(this);
-        this.junction = null;
-        orphanedJunction.refreshConnectedWires();
-        this.getWire().updatePotentialNetwork();
-        this.setDefaultColor();
-    }
-
 }
