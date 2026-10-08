@@ -264,13 +264,23 @@ public class WireJunction extends Joint implements Connectable {
             Point2D dir1 = legDirection(junction, end1, wire1);
             Point2D dir2 = legDirection(junction, end2, wire2);
 
-            // nulový ramenný vektor = vodič má nulovú dĺžku (obe konce v bode spájača)
+            // nulový ramenný vektor = vodič má nulovú dĺžku (obe konce v bode spájača);
+            // vodič v ťahu/náhľade sa zatiaľ nesmie zmazať - inak by reconcile odstránil
+            // rozpracovanú odbočku hneď po stlačení (ešte pred prvým pohybom myši)
             if (dir1.magnitude() < EPS) {
+                if (isTemporary(wire1)) {
+                    junction.updateVisibility();
+                    return;
+                }
                 wire1.delete();
                 markDirty(junction);
                 return;
             }
             if (dir2.magnitude() < EPS) {
+                if (isTemporary(wire2)) {
+                    junction.updateVisibility();
+                    return;
+                }
                 wire2.delete();
                 markDirty(junction);
                 return;
@@ -303,11 +313,19 @@ public class WireJunction extends Joint implements Connectable {
      * sa prepojí na cieľ pôvodného konca {@code dropEnd} (pin alebo iný spájač),
      * prípadne sa presunie na jeho pozíciu. Spájač sa zničí.
      */
+    /**
+     * Vodič, ktorý sa práve ťahá alebo sa ešte ukazuje ako náhľad. Počas toho ho
+     * reconcile nesmie zmazať ako nulový ani zlúčiť - až po pustení myši sa
+     * jeho geometria usadí a spájače sa prepočítajú znova.
+     */
+    private static boolean isTemporary(Wire wire) {
+        return wire == null || Pin.getInProgressWire() == wire
+                || wire.isPreview() || WireEnd.isGrabbing(wire);
+    }
+
     private static void merge(WireJunction junction, Wire keep, WireEnd keepEnd, Wire drop, WireEnd dropEnd) {
         // počas náhľadu/ťahu sa nemá zlúčovať - dokončenie ťahu prepočíta znova
-        if (keep.isPreview() || drop.isPreview()) return;
-        if (Pin.getInProgressWire() == keep || Pin.getInProgressWire() == drop) return;
-        if (WireEnd.isGrabbing(keep) || WireEnd.isGrabbing(drop)) return;
+        if (isTemporary(keep) || isTemporary(drop)) return;
         if (keep == drop) return;
 
         WireEnd dropOther = drop.getEnds()[0] == dropEnd ? drop.getEnds()[1] : drop.getEnds()[0];

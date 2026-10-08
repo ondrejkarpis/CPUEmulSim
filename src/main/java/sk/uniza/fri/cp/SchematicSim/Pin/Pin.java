@@ -169,6 +169,13 @@ public abstract class Pin extends Group implements Connectable {
                 wire.delete();
             }
         }
+
+        // konečná poloha koncov môže zmeniť zlom/zlúčenie na spájači (napr. odbočka
+        // ťahaná v jednej priamke s pôvodným vodičom) - prepočítaj spájače oboch koncov
+        for (WireEnd end : wire.getEnds()) {
+            WireJunction junction = end.getJunction();
+            if (junction != null) WireJunction.markDirty(junction);
+        }
     }
 
     private final EventHandler<MouseDragEvent> onMouseDragReleased = event -> {
