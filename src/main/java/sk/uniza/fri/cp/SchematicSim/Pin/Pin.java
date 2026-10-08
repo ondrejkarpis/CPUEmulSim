@@ -106,6 +106,7 @@ public abstract class Pin extends Group implements Connectable {
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         source.owner.getSheet().addItem(creatingWire);
+        anchorFreeEnd(creatingWire);
         creatingWire.beginPreview(0, null);
         return creatingWire;
     }
@@ -119,8 +120,18 @@ public abstract class Pin extends Group implements Connectable {
         creatingWire.setMouseTransparent(true);
         creatingWire.setOpacity(0.5);
         source.getSheet().addItem(creatingWire);
+        anchorFreeEnd(creatingWire);
         creatingWire.beginPreview(0, null);
         return creatingWire;
+    }
+
+    /**
+     * Pred prvým ťahom sa voľný koniec prichytí na miesto vzniku (kotvu) - náhľad
+     * tak neletí do roha plátna a pri okamžitom pustení vznikne nulový vodič (zruší sa).
+     */
+    private static void anchorFreeEnd(Wire wire) {
+        Point2D anchor = wire.getEnds()[0].getConnectionPoint();
+        wire.getEnds()[1].moveTo(anchor.getX(), anchor.getY());
     }
 
     /**
@@ -132,9 +143,11 @@ public abstract class Pin extends Group implements Connectable {
     }
 
     /**
-     * Ukončenie rozpracovaného vodiča: obnoví jeho vzhľad, vypne náhľad a buď ho
-     * usadí (oba konce pripojené), alebo zruší (niečo ostalo voľné). Volá sa z viacerých
-     * miest pri pustení myši - je idempotentné (prvé volanie vyčistí rozpracovaný stav).
+     * Ukončenie rozpracovaného vodiča: obnoví jeho vzhľad, vypne náhľad a usadí
+     * geometriu. Nedokončené ťahanie (pustenie mimo pripojenia) vodič NEZRUŠÍ -
+     * ostáva na ploche ako vodič s voľným koncom. Zruší sa iba nulový vodič
+     * (pustenie na mieste vzniku = omyl). Volá sa z viacerých miest pri pustení
+     * myši - je idempotentné (prvé volanie vyčistí rozpracovaný stav).
      */
     public static void finishInProgressWire() {
         Wire wire = creatingWire;
@@ -146,10 +159,15 @@ public abstract class Pin extends Group implements Connectable {
         wire.setOpacity(1);
 
         if (wire.getParent() == null) return;
+
+        wire.completeCreation();
+
         if (!wire.areBothEndsConnected()) {
-            wire.delete();
-        } else {
-            wire.completeCreation();
+            Point2D start = wire.getEnds()[0].getConnectionPoint();
+            Point2D finish = wire.getEnds()[1].getConnectionPoint();
+            if (start.distance(finish) < 1e-6) {
+                wire.delete();
+            }
         }
     }
 
