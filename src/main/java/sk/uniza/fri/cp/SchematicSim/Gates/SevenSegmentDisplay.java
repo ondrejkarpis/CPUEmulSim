@@ -261,11 +261,6 @@ public class SevenSegmentDisplay extends GateSymbol {
                 x, y1);
     }
 
-    /** Je displej aktuálne aktívny (CA = 0)? Iba diagnostika. */
-    boolean isCaActive() {
-        return caPin != null && isLow(caPin);
-    }
-
     @Override
     public void simulate() {
         long now = System.currentTimeMillis();

@@ -263,9 +263,9 @@ public class DataBus8 extends BusSymbol {
     private void driveTap(TapPoint tap) {
         if (write) {
             boolean high = (data & (1 << tap.bit)) != 0;
-            setPinAndCommit(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         } else {
-            setPinAndCommit(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+            setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
         }
         scheduleTapVisuals();
     }
@@ -650,10 +650,7 @@ public class DataBus8 extends BusSymbol {
         this.data = Byte.toUnsignedInt(getBus().getDataBus());
         for (TapPoint tap : taps) {
             boolean high = (data & (1 << tap.bit)) != 0;
-            commitPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
-        }
-        if (!taps.isEmpty()) {
-            wakePin(taps.get(0).pin);
+            setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         }
         scheduleTapVisuals();
     }
@@ -666,28 +663,30 @@ public class DataBus8 extends BusSymbol {
         if (writeActive && !write) {
             // začiatok zápisu - premietneme dáta zo zbernice na vývody
             write = true;
+            Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
                 driveTap(tap);
             }
         } else if (!writeActive && write) {
             // koniec zápisu - dáta na vývodoch necháme podržané; zmenia sa až pri setRandomData()
             write = false;
+            Bus.getBus().dataIsChanging();
         }
 
         if (readActive && !read) {
             // začiatok čítania - vývody prepneme do stavu vysokej impedancie,
             // aby mohol obvod odpovedať na zbernicu
             read = true;
+            Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
-                commitPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
-            if (!taps.isEmpty()) wakePin(taps.get(0).pin);
         } else if (!readActive && read) {
             read = false;
+            Bus.getBus().dataIsChanging();
             for (TapPoint tap : taps) {
-                commitPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
+                setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
             }
-            if (!taps.isEmpty()) wakePin(taps.get(0).pin);
         }
     }
 

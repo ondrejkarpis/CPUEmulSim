@@ -251,7 +251,7 @@ public class AddressBus16 extends BusSymbol {
     private void driveTap(TapPoint tap) {
         int address = Short.toUnsignedInt(getBus().getAddressBus());
         boolean high = (address & (1 << tap.bit)) != 0;
-        setPinAndCommit(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         scheduleTapVisuals();
     }
 
@@ -510,14 +510,9 @@ public class AddressBus16 extends BusSymbol {
 
     @Override
     public void syncFromBus() {
-        int address = Short.toUnsignedInt(getBus().getAddressBus());
         for (TapPoint tap : taps) {
-            commitPin(tap.pin, (address & (1 << tap.bit)) != 0 ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            driveTap(tap);
         }
-        if (!taps.isEmpty()) {
-            wakePin(taps.get(0).pin);
-        }
-        scheduleTapVisuals();
     }
 
     /**

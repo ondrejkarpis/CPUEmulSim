@@ -13,6 +13,7 @@ import sk.uniza.fri.cp.CPUEmul.Exceptions.NonExistingInterruptLabelException;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.security.InvalidParameterException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
@@ -75,12 +76,6 @@ public class CPU extends Thread {
 
     /** Zbernica */
     private final Bus bus;
-
-    //casové konštanty zbernice - CPU sa nesynchronizuje s udalosťami simulácie,
-    //signály nastavuje iba na základe reálneho času (ako skutočný obvod)
-    private static final long BUS_STROBE_MS = 5; //dĺžka aktívneho impulzu IW_/MW_/IR_/MR_/IA_ = 0
-    private static final long BUS_HOLD_MS = 1; //pauza po zrušení signálu, aby sa dáta zapísali
-    private static final long BUS_RELEASE_WAIT_MS = 10; //kratká pauza pred uvoľnením zberníc, aby sa stihol zmeniť LE = 0
 
     public static void startTimesDebug() {
         timesLogger = LogManager.getLogger("times_CPU");
@@ -842,7 +837,7 @@ public class CPU extends Thread {
      *
      * @throws NonExistingInterruptLabelException Výnimka, ak neexistuje načítané číslo prerušenia.
      */
-    private void handleInterrupt() throws NonExistingInterruptLabelException, InterruptedException {
+    private void handleInterrupt() throws NonExistingInterruptLabelException {
         //vypnutie preruseni
         flagIE = false;
 
@@ -851,8 +846,7 @@ public class CPU extends Thread {
 //        System.out.println("IA_ LOW");
         bus.setIA_(false);
 //        LOGGER.debug("IA_ Cakanie na steady state");
-        this.busStrobeWait(BUS_STROBE_MS);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
+        this.waitForSteadySimulation(null, true);
 //        LOGGER.debug("IA_ Nacitanie dat");
         byte data = bus.getDataBus();
 //        LOGGER.debug("IA_ Nacitane " + Byte.toUnsignedInt(data));
@@ -984,7 +978,7 @@ public class CPU extends Thread {
 
         //cakanie na nastavenie dat na datovej zbernici
         //updateMessage("Cakanie na nastavenie dat");
-        this.busStrobeWait(BUS_STROBE_MS);
+        this.waitForSteadySimulation(inst, true);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //nacitaj data
@@ -998,8 +992,7 @@ public class CPU extends Thread {
             bus.setIR_(true);
         else
             bus.setMR_(true);
-        //zrusenie dat
-        microstepAwait("Zrusenie dat");
+        // nahodne data
         bus.setRandomData();
 
         //zrus adresu
@@ -1035,7 +1028,7 @@ public class CPU extends Thread {
             bus.setMW_(false);
 
         //updateMessage("Cakanie na nastavenie dat");
-        this.busStrobeWait(BUS_STROBE_MS);
+        this.waitForSteadySimulation(inst, true);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //zrusenie priznaku
@@ -1046,20 +1039,16 @@ public class CPU extends Thread {
             bus.setMW_(true);
 
         //cakanie, aby sa nezapisali nespravne data
-        this.busStrobeWait(BUS_HOLD_MS);
+        this.waitForSteadySimulation(inst, false);
         if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //kratke cakanie, aby simulacia stihla zmenit LE na 0 pred uvolnenim zbernic
-        this.busStrobeWait(BUS_RELEASE_WAIT_MS);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
-
-        //najprv uvolnime adresu - zmena AB0/AB1 donuti dekoder prehodnotit LE pri IW_=1
-        microstepAwait("Zrusenie adresy");
-        bus.setRandomAddress();
-
-        //az potom data, aby sa register uz nepreklopil na nahodnu hodnotu
+        //zrusenie dat
         microstepAwait("Zrusenie dat");
         bus.setRandomData();
+
+        //zrusenie adresy
+        microstepAwait("Zrusenie adresy");
+        bus.setRandomAddress();
     }
 
     /**
@@ -1089,21 +1078,29 @@ public class CPU extends Thread {
         cdlHalt = null;
     }
 
+    private long lastErrorMsgPrint = 0;
+
     /**
-     * Reálny časový impulz na zbernici. CPU nastaví alebo zruší signál a počas vyčkávania ho
-     * priebežne odsimuluje nezávislé simulačné vlákno. CPU sa neblokuje na udalostiach simulácie,
-     * iba vyčká reálny čas (ako v skutočnom obvode).
+     * Pasívne čakanie na nastavenie dát na dátovej zbernici pre ich čítanie.
      *
-     * @param ms Dĺžka vyčkania v milisekundách.
-     * @throws InterruptedException Prerušenie počas čakania.
+     * @param inst Inštrukcia, ktorá požaduje čítanie. Null ak sa jedná o IT.
+     * @param showConsoleMsg True ak sa má zobraziť chybová správa v konzole, false ak nie.
      */
-    private void busStrobeWait(long ms) throws InterruptedException {
-        if (ms <= 0) return;
-        long end = System.nanoTime() + ms * 1_000_000L;
-        while (isExecuting) {
-            long remaining = (end - System.nanoTime()) / 1_000_000L;
-            if (remaining <= 0) break;
-            Thread.sleep(Math.min(remaining, 10));
+    private void waitForSteadySimulation(enumInstructionsSet inst, boolean showConsoleMsg) {
+        try {
+            if (!bus.waitForSteadyState() && isExecuting) {
+                //data nie su nastavene (simulator nebezi alebo nie je 5 sekund na nastavenie dat dostacujucich)
+                if (System.currentTimeMillis() - lastErrorMsgPrint > 2000) {
+                    console.write(
+                            ("Pozor! Chyba zbernice. Spustite prosim simulaciu a usisite sa, ze nedochadza k zacykleniu. ")
+                            .getBytes(Charset.forName("UTF-8")));
+                    console.write(10);
+                    console.write(13);
+                    lastErrorMsgPrint = System.currentTimeMillis();
+                }
+            }
+        } catch (IOException e) {
+            //e.printStackTrace();
         }
     }
 

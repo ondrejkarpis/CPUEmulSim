@@ -256,7 +256,7 @@ public class ControlBus extends BusSymbol {
         }
         int ctrl = getBus().getControlBus();
         boolean high = (ctrl & (1 << BIT_OF_SIGNAL[tap.signal])) != 0;
-        setPinAndCommit(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+        setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         scheduleTapVisuals();
     }
 
