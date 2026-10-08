@@ -1,13 +1,9 @@
 package sk.uniza.fri.cp.Bus;
 
 import javafx.beans.property.IntegerProperty;
-import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 
 import java.util.Random;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Zbernica zabezpečujúca komunikáciu medzi CPU a doskou (fyzickou / simulovanou).
@@ -20,8 +16,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class Bus{
 	private static Bus instance; //inštancia singletonu
-    private Semaphore dataSemaphore; //semafor pre cakanie na nastavenie dat simulatorom
-    private boolean isSimulationRunning; //je spustena simulacia?
 
 	private IntegerProperty addressBus;
 	private IntegerProperty dataBus;
@@ -33,7 +27,6 @@ public class Bus{
 		this.addressBus = new SimpleIntegerProperty(0);
 		this.dataBus = new SimpleIntegerProperty(0);
 		this.controlBus = new SimpleIntegerProperty(0);
-        this.dataSemaphore = new Semaphore(0);
 
 		rand = new Random();
 
@@ -140,147 +133,12 @@ public class Bus{
 	}
 
     /**
-     * Pasívne čakanie na ustálenie simulácie. Čaká, kým simulačné vlákno neoznámi,
-     * že nie je činné (prázdny front udalostí spracovaný, nič mu nezostalo),
-     * prípadne 30 s bez života simulácie - vtedy berie simuláciu ako zlyhanú.
-     *
-     * @return True ak je simulácia ustálená, false inak (simulácia nebeží alebo je zaseknutá).
-     */
-    public boolean waitForSteadyState() {
-        if (Thread.currentThread().getName().equalsIgnoreCase("SimulationThread")) return true;
-
-        long waitStart = System.currentTimeMillis();
-        synchronized (steadyMonitor) {
-            while (isSimulationRunning) {
-                // ustálené = front udalostí je prázdny A simulácia nie je práve v činnosti
-                // (čaká na take() - nemá čo spracúvať). Toto platí aj pre zápis CPU, ktorý
-                // vyrobil nula udalostí (vývody už v želanom stave) - predtým na ňom
-                // starý semafor (odčerpané povolenia) naveky visel.
-                if (queue.size() == 0 && simulationIdle) return true;
-
-                // simulácia stále spracúva zvyšok udalostí - počkáme si na jej signál
-                if (!simulationAlive()) {
-                    reportSteadyFailure("simulacia mŕtva/ticho príliš dlho",
-                            System.currentTimeMillis() - waitStart, queue.size());
-                    return false;
-                }
-
-                try {
-                    steadyMonitor.wait(1);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return false;
-                }
-            }
-            reportSteadyFailure("simulacia nebezi", 0, -1);
-            return false;
-        }
-    }
-
-    /** Bezpečnostná poistka: ak simulačné vlákno neprešlo slučkou viac ako 30 s, berieme ho ako mŕtve. */
-    private boolean simulationAlive() {
-        long heartbeat = this.simLoopHeartbeatMs;
-        return heartbeat == 0 || (System.currentTimeMillis() - heartbeat) < 30000;
-    }
-
-    private long lastSteadyDiagPrint = 0;
-
-    /** Heartbeat simulácie - čas (ms) posledného prechodu simulačnou slučkou (na diagnostiku). */
-    private volatile long simLoopHeartbeatMs = 0;
-
-    public void reportSimLoopActivity() {
-        this.simLoopHeartbeatMs = System.currentTimeMillis();
-    }
-
-    private long simIdleMs() {
-        long pulse = this.simLoopHeartbeatMs;
-        return pulse == 0 ? -1 : System.currentTimeMillis() - pulse;
-    }
-
-    private void reportSteadyFailure(String reason, long waitedMs, int queueSize) {
-        // diagnostika - najviac 1x za 2 s, aby nezahlcoval konzolu
-        long now = System.currentTimeMillis();
-        if (now - lastSteadyDiagPrint > 2000) {
-            lastSteadyDiagPrint = now;
-            System.err.println("[Bus] waitForSteadyState=false (" + reason
-                    + " | cakal ms: " + waitedMs
-                    + " | fronte: " + queueSize
-                    + " | voľné permity: " + dataSemaphore.availablePermits()
-                    + " | simulationIsRunning=" + isSimulationRunning
-                    + " | sim slucka nebezi uz ms: " + simIdleMs() + ")");
-            // výpis stacktrace vlákna simulácie - ukáže, kde je zaseknuté
-            for (Thread t : Thread.getAllStackTraces().keySet()) {
-                if ("SchematicSimulationThread".equals(t.getName())) {
-                    System.err.println("[Bus] StackTrace vlákna simulácie:");
-                    for (StackTraceElement el : t.getStackTrace()) {
-                        System.err.println("    at " + el);
-                    }
-                }
-            }
-        }
-    }
-
-    private LinkedBlockingQueue<?> queue;
-
-    public void setEventsQueue(LinkedBlockingQueue<?> queue) {
-        this.queue = queue;
-    }
-
-    private final Object steadyMonitor = new Object();
-
-    /** Pravda = simulačné vlákno nemá žiadnu nedokončenú prácu (čaká na take(), front je prázdny). */
-    private volatile boolean simulationIdle;
-
-    /**
-     * Oznámevnie zbernici, že dáta boli ustálené a je možné ich čítať.
-     * Volá simulačné vlákno, keď vyprázdnilo front a ide si sadnúť na čakanie.
-     */
-    public void dataInSteadyState() {
-        synchronized (steadyMonitor) {
-            simulationIdle = true;
-            steadyMonitor.notifyAll();
-        }
-    }
-
-    /**
-     * Oznam simulácie, že začína spracúvať udalosť - simulácia nie je ustálená,
-     * CPU musí počkať. Volá simulačné vlákno pred každým spracovaním udalosti.
-     */
-    public void simulationProcessingStarts() {
-        synchronized (steadyMonitor) {
-            simulationIdle = false;
-        }
-    }
-
-    /**
-     * Oznámevnie zbernici, že prebiehajú zmeny, ktoré môžu ovplyvniť dáta na dátovej zbernici a nie je teda bezpečné
-     * z nej čítať.
-     * <p>
-     * Zámerne nevykonáva nič kritické: volá sa z CPU (DataBus8.handleControlChange) počas zápisov,
-     * kedy by zneplatnenie nečinnosti simulácie spôsobilo nekončiace čakanie pri zápisoch s nulovými
-     * udalosťami (vývody už v želanom stave). Či je simulácia ustálená, oznamuje samotné simulačné
-     * vlákno cez {@link #dataInSteadyState()}/{@link #simulationProcessingStarts()}.
-     */
-    public void dataIsChanging() {
-        // zámerne prázdna metóda - pozri poznámku vyššie
-    }
-
-    /**
-     * Oznámenie simulácie o zmene stavu. Či je spustená a má CPU čakať na nastavenie dát alebo nie je spustená.
-     *
-     * @param isRunning Stav simulácie, true ak je spustená, false inak.
-     */
-    public void simulationIsRunning(boolean isRunning) {
-        this.isSimulationRunning = isRunning;
-    }
-
-    /**
      * Nastavenie negovaného signálu MW - memory write.
      * 
      * @param MW_ Nová hodnota signálu MW.
      */
     synchronized public void setMW_(boolean MW_) {
-        mapToControlBus("MW/", MW_);
+        mapToControlBus("MW_", MW_);
     }
 
     /**
@@ -290,7 +148,7 @@ public class Bus{
      */
     synchronized public void setMR_(boolean MR_) {
         //this.dataBus.setValue(0); //kvazi odpojenie od zbernice
-        mapToControlBus("MR/", MR_);
+        mapToControlBus("MR_", MR_);
     }
     
     /**
@@ -299,7 +157,7 @@ public class Bus{
      * @param IW_ Nová hodnota signálu IW.
      */
     synchronized public void setIW_(boolean IW_) {
-        mapToControlBus("IW/", IW_);
+        mapToControlBus("IW_", IW_);
     }
 
     /**
@@ -309,7 +167,7 @@ public class Bus{
      */
     synchronized public void setIR_(boolean IR_) {
         //this.dataBus.setValue(0); //kvazi odpojenie od zbernice
-        mapToControlBus("IR/", IR_);
+        mapToControlBus("IR_", IR_);
     }
 
     /**
@@ -318,7 +176,7 @@ public class Bus{
      * @param IA_ Nová hodnota signálu IA.
      */
     synchronized public void setIA_(boolean IA_) {
-         mapToControlBus("IA/", IA_);
+         mapToControlBus("IA_", IA_);
     }
 
     /**
@@ -352,11 +210,11 @@ public class Bus{
      * Inicializácia riadiacej zbernice do východzích hodnôt.
      */
 	private void initControlBus(){
-        mapToControlBus("MW/", true);
-        mapToControlBus("MR/", true);
-        mapToControlBus("IW/", true);
-        mapToControlBus("IR/", true);
-        mapToControlBus("IA/", true);
+        mapToControlBus("MW_", true);
+        mapToControlBus("MR_", true);
+        mapToControlBus("IW_", true);
+        mapToControlBus("IR_", true);
+        mapToControlBus("IA_", true);
 
         mapToControlBus("IT", false);
         mapToControlBus("RY", false);
@@ -399,11 +257,11 @@ public class Bus{
      */
     private int mapSignal(String signal){
         switch (signal){
-            case "MW/": return 8;
-            case "MR/": return 7;
-            case "IW/": return 6;
-            case "IR/": return 5;
-            case "IA/": return 4;
+            case "MW_": return 8;
+            case "MR_": return 7;
+            case "IW_": return 6;
+            case "IR_": return 5;
+            case "IA_": return 4;
             case "IT": return 3;
             case "RY": return 2;
             case "BQ": return 1;
@@ -415,15 +273,15 @@ public class Bus{
 
     //
 //    synchronized public boolean isMW_() {
-//		return mapFromControlBus("MW/");
+//		return mapFromControlBus("MW_");
 //	}
 //
 //	synchronized public boolean isMR_() {
-//		return mapFromControlBus("MR/");
+//		return mapFromControlBus("MR_");
 //	}
 //
 //	synchronized public boolean isIW_() {
-//		return mapFromControlBus("IW/");
+//		return mapFromControlBus("IW_");
 //	}
 //
 //	synchronized public boolean isIR_() {
@@ -431,7 +289,7 @@ public class Bus{
 //	}
 //
     public boolean isIA_() {
-        return mapFromControlBus("IA/");
+        return mapFromControlBus("IA_");
     }
 //    
 //    /**

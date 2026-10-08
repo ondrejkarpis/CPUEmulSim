@@ -17,6 +17,7 @@ import sk.uniza.fri.cp.SchematicSim.Pin.OutputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -223,9 +224,16 @@ public class Register8 extends GateSymbol {
 
     @Override
     public void simulate() {
-        // počas aktívneho LE (log. 1) sa dáta transparentne premietajú do registra
+        // Transparentný latch: počas LE=1 sa každá zmena dátových vstupov zapíše
+        // do registra; po zániku LE si register hodnotu podrží (vzorkovanie úrovňou,
+        // nie hranou). Simulácia je bezpečná - zbernice zapisujú potenciály okamžite,
+        // takže počas LE už hradlá nevidia NC a nedochádza k zápisu čiastočných dát.
         if (isHigh(pinLE)) {
-            latch = readData();
+            int newLatch = readData();
+            if (newLatch != latch) {
+                latch = newLatch;
+                logLatchChange();
+            }
         }
 
         // pri aktívnom OE_ (log. 0) outputs hná obsah registra, inak sú v Z
@@ -234,6 +242,33 @@ public class Register8 extends GateSymbol {
         } else {
             setOutputsImpedance();
         }
+    }
+
+    /**
+     * DIAGNOSTIKA (dočasná): pri zmene obsahu registra vypíše novú hodnotu, aktuálnu
+     * úroveň LE, stav CA oboch 7-segmentových displejov a obsah druhého registra.
+     */
+    private void logLatchChange() {
+        StringBuilder sb = new StringBuilder("[Diag] ");
+        sb.append(getName()).append('@').append(getGridPosX()).append(',').append(getGridPosY());
+        sb.append(" latch=0x").append(String.format("%02X", latch & 0xFF));
+        sb.append(" LE=").append(isHigh(pinLE) ? '1' : '0');
+        Potential.Value leNet = pinLE.getPotential() != null ? pinLE.getPotential().getValue() : null;
+        sb.append(" LEnet=").append(leNet != null ? leNet.name() : "null");
+        sb.append(" IOC=").append(leNet != null && leNet == Potential.Value.NC ? "X" : "ok");
+        if (getSheet() != null) {
+            for (GateSymbol gate : getSheet().getGates()) {
+                if (gate == this || !(gate instanceof Register8)) continue;
+                sb.append(" | otherREG=0x").append(String.format("%02X", ((Register8) gate).getLatch() & 0xFF));
+            }
+            for (GateSymbol gate : getSheet().getGates()) {
+                if (!(gate instanceof SevenSegmentDisplay)) continue;
+                SevenSegmentDisplay d = (SevenSegmentDisplay) gate;
+                sb.append(" | CA").append('(').append(d.getGridPosX()).append(',').append(d.getGridPosY()).append(')')
+                        .append(d.isCaActive() ? "=ON" : "=off");
+            }
+        }
+        System.out.println(sb);
     }
 
     @Override
