@@ -670,7 +670,8 @@ public class Wire extends HighlightGroup {
 
     /**
      * Dokončenie vytvárania vodiča: vypne náhľad, zarovná voľné konce na mriežku,
-     * usadí geometriu a spracuje čakajúce spájače.
+     * usadí geometriu a spracuje čakajúce spájače. Ak bol ťah ukončený na voľnom
+     * mieste v L-tvarovej polohe, zachovajú sa obe ramená ako dva vodiče.
      */
     public void completeCreation() {
         endPreview();
@@ -680,8 +681,50 @@ public class Wire extends HighlightGroup {
                 end.moveTo(snapToGrid(end.getLayoutX(), grid), snapToGrid(end.getLayoutY(), grid));
             }
         }
-        settleGeometry(this.ends[1]);
+        if (!materializeElbow(grid)) {
+            settleGeometry(this.ends[1]);
+        }
         WireJunction.processNow();
+    }
+
+    /**
+     * Ukončenie ťahu L-tvarom na voľnom mieste: obe ramená náhľadu sa zachovajú
+     * ako DVA vodiče spojené neviditeľným zlomom (prvý koniec tohto vodiča sa
+     * presunie do rohu, nový vodič pokračuje z rohu po miesto pustenia). Druhé
+     * rameno sa vytvorí len ak nie je príliš krátke (aspoň polovica mriežky) -
+     * vtedy sa nechá klasické zarovnanie na jednu priamu úsečku.
+     *
+     * @param grid veľkosť mriežky (práh pre minimálnu dĺžku druhého ramena)
+     * @return {@code true} ak vznikol zlom a vodič sa už ďalej neusadzuje
+     */
+    private boolean materializeElbow(double grid) {
+        WireEnd anchor = this.ends[0];
+        WireEnd free = this.ends[1];
+        if (!anchor.isConnected() || free.isConnected()) return false;
+
+        Point2D dropPoint = free.getConnectionPoint();
+        Point2D corner = this.horizontal
+                ? new Point2D(dropPoint.getX(), anchor.getLayoutY())
+                : new Point2D(anchor.getLayoutX(), dropPoint.getY());
+
+        // nulová prvá časť = roh na kotve (nulový vodič + spájač na pine) - neriešime
+        if (corner.distance(anchor.getLayoutX(), anchor.getLayoutY()) < ALIGN_EPS) return false;
+
+        double secondArm = corner.distance(dropPoint);
+        if (secondArm < grid / 2.0) return false;
+
+        WireJunction junction = WireJunction.at(getSheet(), corner.getX(), corner.getY());
+        free.moveTo(corner.getX(), corner.getY());
+        free.connect(junction);
+
+        Wire tail = new Wire(getSheet());
+        tail.changeColor(this.color);
+        getSheet().addItem(tail);
+        tail.ends[0].connect(junction);
+        tail.ends[1].moveTo(dropPoint.getX(), dropPoint.getY());
+        tail.updateGeometry();
+        updateGeometry();
+        return true;
     }
 
     /**
