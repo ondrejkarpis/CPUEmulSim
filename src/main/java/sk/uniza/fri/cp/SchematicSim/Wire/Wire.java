@@ -7,6 +7,7 @@ import javafx.scene.Node;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
+import javafx.scene.shape.Polyline;
 import javafx.scene.shape.StrokeLineCap;
 import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
@@ -54,8 +55,8 @@ public class Wire extends HighlightGroup {
     /** Tolerancia pre zistenie zarovnania koncov (pozície sú násobky mriežky). */
     private static final double ALIGN_EPS = 0.5;
 
-    /** Hrúbka a štýl zvýraznenej (vybranej/hover) čiary. */
-    private static final double HIGHLIGHT_WIDTH = 3;
+    /** Hrúbka čiarkovaného prekryvu zvýraznenia (výber/hover) - kreslí sa NAD čiarou. */
+    private static final double HIGHLIGHT_WIDTH = 1;
     private static final double NORMAL_WIDTH = 2;
 
     private Color color;
@@ -72,6 +73,13 @@ public class Wire extends HighlightGroup {
 
     /** Druhé rameno L-tvaru - viditeľné len počas tvorby/ťahania konca. */
     private final Line lineB;
+
+    /**
+     * Čiarkovaný prekryv zvýraznenia (inverzná farba) kreslený NAD základnou čiarou -
+     * základná čiara si pri výbere zachováva svoju farbu (inak by napr. čierny vodič
+     * na bielom pozadí pri výbere zbil do bielej a zmizol).
+     */
+    private final Polyline highlightLine;
 
     private final Group endsGroup;
 
@@ -131,8 +139,15 @@ public class Wire extends HighlightGroup {
         this.lineB = createLine();
         this.lineB.setVisible(false);
 
+        this.highlightLine = new Polyline();
+        this.highlightLine.setStrokeLineCap(StrokeLineCap.ROUND);
+        this.highlightLine.setStrokeWidth(HIGHLIGHT_WIDTH);
+        this.highlightLine.getStrokeDashArray().setAll(6d, 4d);
+        this.highlightLine.setMouseTransparent(true);
+        this.highlightLine.setVisible(false);
+
         this.endsGroup = new Group(this.ends[0], this.ends[1]);
-        this.getChildren().addAll(this.line, this.lineB, this.endsGroup);
+        this.getChildren().addAll(this.line, this.lineB, this.highlightLine, this.endsGroup);
         this.setId("wire");
         refreshLines();
 
@@ -211,24 +226,23 @@ public class Wire extends HighlightGroup {
     }
 
     /**
-     * Obnova vzhľadu oboch čiar podľa aktuálnej farby a zvýraznenia. Vybraný/hover
-     * vodič sa vykreslí inverznou farbou, čiarkovane a hrubšie.
+     * Obnova vzhľadu oboch čiar podľa aktuálnej farby. Základná čiara si VŽDY
+     * zachováva svoju farbu (plná, hrubá podľa {@link #NORMAL_WIDTH}); výber/hover
+     * sa zobrazí ako čiarkovaný inverzný prekryv {@code highlightLine} nad ňou.
      */
     private void refreshLines() {
-        boolean highlighted = this.highlightOpacity > 0;
-        Color stroke = highlighted ? this.color.invert() : getCurrentColor();
-        double width = highlighted ? HIGHLIGHT_WIDTH : NORMAL_WIDTH;
+        Color stroke = getCurrentColor();
         for (Line part : new Line[]{this.line, this.lineB}) {
             part.setStroke(stroke);
-            part.setStrokeWidth(width);
-            if (highlighted) {
-                part.getStrokeDashArray().setAll(6d, 4d);
-                part.setOpacity(this.highlightOpacity);
-            } else {
-                part.getStrokeDashArray().clear();
-                part.setOpacity(1);
-            }
+            part.setStrokeWidth(NORMAL_WIDTH);
+            part.getStrokeDashArray().clear();
+            part.setOpacity(1);
         }
+
+        boolean highlighted = this.highlightOpacity > 0;
+        this.highlightLine.setStroke(this.color.invert());
+        this.highlightLine.setOpacity(highlighted ? this.highlightOpacity : 1);
+        this.highlightLine.setVisible(highlighted);
     }
 
     private void applyHighlight(double opacity) {
@@ -337,17 +351,32 @@ public class Wire extends HighlightGroup {
                 setLine(this.lineB, corner, free);
                 this.lineB.setVisible(true);
             }
-            return;
+        } else {
+            setLine(this.line, p0, p1);
+            this.lineB.setVisible(false);
+
+            // udržanie orientácie pri zarovnaných koncoch
+            if (sameCoordinate(p0.getY(), p1.getY())) {
+                this.horizontal = true;
+            } else if (sameCoordinate(p0.getX(), p1.getX())) {
+                this.horizontal = false;
+            }
         }
 
-        setLine(this.line, p0, p1);
-        this.lineB.setVisible(false);
+        syncHighlightGeometry();
+    }
 
-        // udržanie orientácie pri zarovnaných koncoch
-        if (sameCoordinate(p0.getY(), p1.getY())) {
-            this.horizontal = true;
-        } else if (sameCoordinate(p0.getX(), p1.getX())) {
-            this.horizontal = false;
+    /**
+     * Geometria čiarkovaného prekryvu zvýraznenia kopíruje základnú čiaru
+     * (a počas náhľadu aj druhé rameno L-tvaru).
+     */
+    private void syncHighlightGeometry() {
+        javafx.collections.ObservableList<Double> points = this.highlightLine.getPoints();
+        points.setAll(
+                this.line.getStartX(), this.line.getStartY(),
+                this.line.getEndX(), this.line.getEndY());
+        if (this.lineB.isVisible()) {
+            points.addAll(this.lineB.getEndX(), this.lineB.getEndY());
         }
     }
 
