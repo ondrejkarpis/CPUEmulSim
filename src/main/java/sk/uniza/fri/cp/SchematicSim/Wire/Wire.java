@@ -296,6 +296,10 @@ public class Wire extends HighlightGroup {
 
     public void endPreview() {
         if (!this.preview) return;
+        // orientácia zvolená počas ťahania sa prenesie do hotového vodiča - inak by
+        // usadenie oboch ukotvených koncov (splitAtConflict) použilo starú hodnotu
+        // a L-tvar by sa otočil na opak toho, čo používateľ počas ťahania videl
+        if (this.previewAxis != null) this.horizontal = this.previewAxis;
         this.preview = false;
         this.previewAxis = null;
         this.lineB.setVisible(false);
