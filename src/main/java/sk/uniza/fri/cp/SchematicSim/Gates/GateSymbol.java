@@ -1,13 +1,17 @@
 package sk.uniza.fri.cp.SchematicSim.Gates;
 
 import javafx.geometry.Point2D;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SheetChangeEvent;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
+import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +42,28 @@ public abstract class GateSymbol extends Item {
         this.pins = createPins();
         this.getChildren().addAll(pins);
         this.getChildren().add(0, drawBody()); // telo pod pinmi
+        this.addEventHandler(MouseEvent.MOUSE_RELEASED, this::snapPinsToFreeEnds);
+    }
+
+    /**
+     * Po pustení myši sa piny, ktoré doľahnú na voľný koniec vodiča, pripoja naň
+     * (pin sa "priloží" na voľný koniec). Kontrolujú sa aj súčiastky presunuté
+     * spolu s touto pri viacnásobnom výbere.
+     */
+    private void snapPinsToFreeEnds(MouseEvent event) {
+        if (event.getButton() != MouseButton.PRIMARY && event.getButton() != MouseButton.NONE) return;
+        SchematicSheet sheet = getSheet();
+        if (sheet == null || !sheet.isEditingEnabled()) return;
+
+        List<GateSymbol> moved = new ArrayList<>();
+        if (this.isSelected()) moved.addAll(sheet.getSelectedGates());
+        if (!moved.contains(this)) moved.add(this);
+
+        List<Pin> pins = new ArrayList<>();
+        for (GateSymbol gate : moved) {
+            if (gate.getPins() != null) pins.addAll(gate.getPins());
+        }
+        Wire.connectFreeEndsToPins(sheet, pins);
     }
 
     /**

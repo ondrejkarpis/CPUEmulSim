@@ -743,6 +743,42 @@ public class Wire extends HighlightGroup {
         WireJunction.processNow();
     }
 
+    /**
+     * Pripojí voľné konce vodičov, pod ktoré doľahnú piny presúvaných súčiastok
+     * (opačný smer než bežné ťahanie vodiča na pin). Každý pin sa spojí s prvým
+     * voľným koncom v polovici mriežky - rovnaká tolerancia ako pri pustení konca
+     * vodiča na pin. Volá sa po pustení presunutej súčiastky.
+     */
+    public static void connectFreeEndsToPins(SchematicSheet sheet, Iterable<Pin> pins) {
+        double tolerance = sheet.getGrid().getSizeMin() / 2.0;
+        double scale = sheet.getAppliedScale();
+        List<Wire> wires = sheet.getWires();
+
+        for (Pin pin : pins) {
+            if (pin == null || pin.isOccupied()) continue;
+            Point2D pinPos = pin.getSceneGridPosition();
+            double pinX = pinPos.getX() / scale;
+            double pinY = pinPos.getY() / scale;
+
+            for (Wire wire : wires) {
+                if (wire.getParent() == null || wire.isPreview() || wire == Pin.getInProgressWire()) {
+                    continue;
+                }
+                for (WireEnd end : wire.getEnds()) {
+                    if (end.isConnected()) continue;
+                    double dx = end.getLayoutX() - pinX;
+                    double dy = end.getLayoutY() - pinY;
+                    if (dx * dx + dy * dy <= tolerance * tolerance) {
+                        end.connect(pin);
+                        wire.scheduleSettle(end);
+                        break;
+                    }
+                }
+                if (pin.isOccupied()) break;
+            }
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Výber, zvýraznenie a udalosti
     // ---------------------------------------------------------------------------
