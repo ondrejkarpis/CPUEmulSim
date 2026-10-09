@@ -8,7 +8,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
-import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -63,8 +62,7 @@ public class WireJunction extends Joint implements Connectable {
     public WireJunction(SchematicSheet sheet) {
         super(sheet, null);
 
-        GridSystem grid = getSheet().getGrid();
-        double r = grid.getSizeMin() / 7.0;
+        double r = getSheet().getComponentCell() / 7.0;
         this.baseRadius = r;
 
         this.junctionDot = new Circle(0, 0, r, FILL_COLOR);

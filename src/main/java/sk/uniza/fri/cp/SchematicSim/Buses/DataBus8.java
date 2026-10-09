@@ -162,7 +162,7 @@ public class DataBus8 extends BusSymbol {
     }
 
     private void initRail() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double railCenterX = RAIL_WIDTH * cell / 2.0;
         double thickness = Math.max(4, cell * RAIL_THICKNESS);
 
@@ -211,12 +211,12 @@ public class DataBus8 extends BusSymbol {
      * vývodu (aby sa naň dal pripojiť test/vodič). Verejné kvôli testom.
      */
     public Pin createTap(int bit, int localY) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         return createTap(bit, (double) localY);
     }
 
     public Pin createTap(int bit, double localY) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double x = RAIL_WIDTH * cell / 2.0;
         double y = snap(clamp(localY, (topRow + 1) * cell, rows * cell), cell);
 
@@ -293,7 +293,7 @@ public class DataBus8 extends BusSymbol {
      * existujúci), aby sa naň dal pripojiť ťahaný vodič.
      */
     private Pin createAllTaps() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int count = menuItems.length;
         Pin first = null;
         Set<Integer> usedRows = new HashSet<>();
@@ -343,7 +343,7 @@ public class DataBus8 extends BusSymbol {
         if (creating.areBothEndsConnected()) return;
 
         final double localY = toLocalY(event);
-        double thickness = Math.max(4, getSheet().getGrid().getSizeMin() * RAIL_THICKNESS);
+        double thickness = Math.max(4, getSheet().getComponentCell() * RAIL_THICKNESS);
         final boolean leftWired = event.getX() < thickness / 2.0;
 
         openSignalMenu(bit -> {
@@ -376,7 +376,7 @@ public class DataBus8 extends BusSymbol {
 
     private void handleResizeDragged(MouseEvent event) {
         if (!resizing) return;
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double localY = toLocalY(event);
         if (resizingTop) {
             int maxTopRow = Math.min(rows - MIN_ROWS, minTopRowForTaps());
@@ -408,7 +408,7 @@ public class DataBus8 extends BusSymbol {
 
     /** Premietnutie topRow/rows do geometrie čiary a rukovätí. */
     private void updateRailGeometry() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         line.setY(topRow * cell + cell / 2.0);
         line.setHeight(railHeight(cell));
         resizeHandle.setCenterY(rows * cell - cell / 2.0);
@@ -543,7 +543,7 @@ public class DataBus8 extends BusSymbol {
      * Nastavenie počtu riadkov (dĺžky) lištovej zbernice. Ekvivalent potiahnutia spodného rukoväťa.
      */
     public void setRows(int newRows) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int clamped = clamp(newRows, Math.max(topRow + MIN_ROWS, minRowsForTaps()), MAX_ROWS);
         rows = clamped;
         updateRailGeometry();
@@ -552,7 +552,7 @@ public class DataBus8 extends BusSymbol {
 
     /** Nastavenie horného riadku (posun horného konca lišty). */
     public void setTopRow(int newTopRow) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int maxTopRow = Math.min(rows - MIN_ROWS, minTopRowForTaps());
         int clamped = clamp(newTopRow, -MAX_ROWS, maxTopRow);
         topRow = clamped;
@@ -573,7 +573,7 @@ public class DataBus8 extends BusSymbol {
      * (plus rezervný riadok kvôli rukoväti na zmenu dĺžky).
      */
     private int minRowsForTaps() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int maxRow = 0;
         for (TapPoint tap : taps) {
             maxRow = Math.max(maxRow, (int) Math.round(tap.pin.getLayoutY() / cell));
@@ -588,7 +588,7 @@ public class DataBus8 extends BusSymbol {
      */
     private int minTopRowForTaps() {
         if (taps.isEmpty()) return Integer.MAX_VALUE;
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int minRow = Integer.MAX_VALUE;
         for (TapPoint tap : taps) {
             minRow = Math.min(minRow, (int) Math.round(tap.pin.getLayoutY() / cell));

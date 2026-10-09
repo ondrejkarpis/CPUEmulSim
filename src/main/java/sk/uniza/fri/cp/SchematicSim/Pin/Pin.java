@@ -216,7 +216,7 @@ public abstract class Pin extends Group implements Connectable {
         this.potential = new Potential(this, null);
         this.potential.setType(defaultTypeFor(direction));
 
-        int gridPx = owner.getSheet().getGrid().getSizeMin();
+        int gridPx = owner.getSheet().getComponentCell();
         double r = gridPx / 8.0;
 
         Rectangle hitArea = new Rectangle(gridPx, gridPx);

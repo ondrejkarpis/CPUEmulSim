@@ -93,7 +93,7 @@ public class Led extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
@@ -156,7 +156,7 @@ public class Led extends GateSymbol {
     }
 
     public void placeInput(Side side) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         pinIn.setLayoutX(placementOffsetX(side) * cell);
         pinIn.setLayoutY(placementOffsetY(side) * cell);
         pinIn.setSide(side);

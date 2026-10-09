@@ -71,7 +71,7 @@ public class BusBuffer extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         int w = getGridWidth() * cell;
         int h = getGridHeight() * cell;
         double bubble = cell / 4.0;

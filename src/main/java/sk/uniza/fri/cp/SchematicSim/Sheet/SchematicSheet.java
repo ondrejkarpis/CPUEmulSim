@@ -591,6 +591,17 @@ public class SchematicSheet extends ScrollPane {
         this.hasChanged = false;
     }
 
+    /**
+     * Pevná veľkosť bunky pre kreslenie súčiastok v pixeloch. Mriežka plochy (čiary aj
+     * snap vodičov a súčiastok) môže byť jemnejšia, súčiastky si však držia pôvodnú
+     * veľkosť tela aj rozostup pinov.
+     */
+    public static final int COMPONENT_CELL = 20;
+
+    public int getComponentCell() {
+        return COMPONENT_CELL;
+    }
+
     public GridSystem getGrid() {
         return gridSystem;
     }

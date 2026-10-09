@@ -6,7 +6,6 @@ import javafx.scene.Group;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
-import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Movable;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 
@@ -33,14 +32,14 @@ public class Joint extends Movable {
         super(sheet);
         this.wire = wire;
 
-        GridSystem grid = getSheet().getGrid();
+        double cell = getSheet().getComponentCell();
 
-        Rectangle boundingBox = new Rectangle(grid.getSizeX(), grid.getSizeY());
+        Rectangle boundingBox = new Rectangle(cell, cell);
         boundingBox.setOpacity(0);
-        boundingBox.setLayoutX(-grid.getSizeX() / 2.0);
-        boundingBox.setLayoutY(-grid.getSizeY() / 2.0);
+        boundingBox.setLayoutX(-cell / 2.0);
+        boundingBox.setLayoutY(-cell / 2.0);
 
-        this.radius = grid.getSizeMin() / 7.0;
+        this.radius = cell / 7.0;
         Group graphic = generateJointGraphic(radius);
 
         this.getChildren().addAll(boundingBox, graphic);

@@ -180,7 +180,7 @@ public class SevenSegmentDisplay extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double c = cell;
 
         segmentShapes = new Shape[SEGMENT_COUNT];

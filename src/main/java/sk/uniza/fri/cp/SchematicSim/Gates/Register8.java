@@ -110,7 +110,7 @@ public class Register8 extends GateSymbol {
 
     /** Premietnutie {@link #swapped} do pozícií pinov Dx/Qx a ich popiskov. */
     private void applySwap() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         Text[] dLabels = (Text[]) bodyPane().getProperties().get("dLabels");
         Text[] qLabels = (Text[]) bodyPane().getProperties().get("qLabels");
         for (int index = 0; index < 8; index++) {
@@ -171,7 +171,7 @@ public class Register8 extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         Rectangle body = new Rectangle(GRID_WIDTH * cell, GRID_HEIGHT * cell, Color.WHITE);
         body.setStroke(Color.BLACK);
         body.setStrokeWidth(3);

@@ -96,7 +96,7 @@ public class PushButton extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
@@ -175,8 +175,8 @@ public class PushButton extends GateSymbol {
 
     private void centerLabel() {
         if (labelText == null) return;
-        double w = getGridWidth() * getSheet().getGrid().getSizeMin();
-        double h = getGridHeight() * getSheet().getGrid().getSizeMin();
+        double w = getGridWidth() * getSheet().getComponentCell();
+        double h = getGridHeight() * getSheet().getComponentCell();
         labelText.setLayoutY(h / 2.0);
         labelText.setLayoutX(w / 2.0 - labelText.getBoundsInLocal().getWidth() / 2.0);
     }

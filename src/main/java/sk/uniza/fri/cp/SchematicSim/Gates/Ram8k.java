@@ -131,7 +131,7 @@ public class Ram8k extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         Rectangle body = new Rectangle(GRID_WIDTH * cell, GRID_HEIGHT * cell, Color.WHITE);
         body.setStroke(Color.BLACK);
         body.setStrokeWidth(3);

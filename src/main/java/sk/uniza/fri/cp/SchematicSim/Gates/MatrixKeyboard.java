@@ -131,7 +131,7 @@ public class MatrixKeyboard extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
 
         Pane pane = new Pane();
 
@@ -342,7 +342,7 @@ public class MatrixKeyboard extends GateSymbol {
         keyLabels[row][col] = value == null ? "" : value;
         Text label = keyLabelTexts[row][col];
         if (label != null) {
-            double cell = getSheet().getGrid().getSizeMin();
+            double cell = getSheet().getComponentCell();
             label.setText(keyLabels[row][col]);
             label.setLayoutX((1 + col * KEY_GRID) * cell + cell - label.getBoundsInLocal().getWidth() / 2.0);
         }

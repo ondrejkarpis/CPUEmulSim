@@ -50,7 +50,7 @@ public abstract class BusSymbol extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         Rectangle body = new Rectangle(getGridWidth() * cell, getGridHeight() * cell, Color.LIGHTYELLOW);
         body.setStroke(Color.DARKGOLDENROD);
         body.setStrokeWidth(3);

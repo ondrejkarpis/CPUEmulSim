@@ -78,7 +78,7 @@ public class Input extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
 
@@ -134,7 +134,7 @@ public class Input extends GateSymbol {
     }
 
     public void placeOutput(Side side) {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         outPin.setLayoutX(placementOffsetX(side) * cell);
         outPin.setLayoutY(placementOffsetY(side) * cell);
         outPin.setSide(side);
@@ -212,7 +212,7 @@ public class Input extends GateSymbol {
     }
 
     private double wCenter() {
-        return getSheet().getGrid().getSizeMin() * getGridWidth() / 2.0;
+        return getSheet().getComponentCell() * getGridWidth() / 2.0;
     }
 
     public boolean isOn() {

@@ -93,7 +93,7 @@ public abstract class MultiInputGate extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
         double bubble = cell / 4.0;
@@ -172,7 +172,7 @@ public abstract class MultiInputGate extends GateSymbol {
             newPins.add(new InputPin(this, INPUT_NAMES[i], 0, 1 + i, Side.LEFT));
         }
 
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         currentOutput.setLayoutX(getGridWidth() * cell);
         currentOutput.setLayoutY(outputRow() * cell);
         if (currentOutput.getWireEnd() != null) currentOutput.getWireEnd().refreshPosition();

@@ -63,7 +63,7 @@ public class SchematicController {
     private static final String WINDOW_TITLE = "Simulátor - Schéma";
     private static final double SCHEME_WIDTH = 5000;
     private static final double SCHEME_HEIGHT = 5000;
-    private static final int GRID_SIZE = 20;
+    private static final int GRID_SIZE = 10;
 
     private final CPUController cpuController;
 

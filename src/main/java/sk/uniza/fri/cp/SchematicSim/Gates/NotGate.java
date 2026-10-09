@@ -59,7 +59,7 @@ public class NotGate extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        int cell = getSheet().getGrid().getSizeMin();
+        int cell = getSheet().getComponentCell();
         double w = getGridWidth() * cell;
         double h = getGridHeight() * cell;
         double bubble = cell / 4.0;
