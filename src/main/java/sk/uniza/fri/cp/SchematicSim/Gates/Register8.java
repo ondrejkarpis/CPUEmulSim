@@ -183,9 +183,12 @@ public class Register8 extends GateSymbol {
         Text[] qLabels = new Text[8];
 
         Text title = new Text("REGISTER");
-        title.setLayoutX((GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0);
         title.setLayoutY(-cell * 0.2);
         title.setFont(Font.font(cell * 0.6));
+        title.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0,
+                title.boundsInLocalProperty()));
+        registerNameLabel(title);
         pane.getChildren().add(title);
 
         for (int index = 0; index < 8; index++) {
@@ -279,13 +282,14 @@ public class Register8 extends GateSymbol {
 
     @Override
     public Map<String, String> saveProperties() {
-        Map<String, String> properties = new LinkedHashMap<>();
+        Map<String, String> properties = new LinkedHashMap<>(super.saveProperties());
         properties.put("swapped", Boolean.toString(swapped));
         return properties;
     }
 
     @Override
     public void loadProperties(Map<String, String> properties) {
+        super.loadProperties(properties);
         String swappedValue = properties.get("swapped");
         if (swappedValue != null) {
             swapped = Boolean.parseBoolean(swappedValue.trim());
@@ -306,6 +310,11 @@ public class Register8 extends GateSymbol {
     @Override
     public String getName() {
         return "Register 8";
+    }
+
+    @Override
+    public String getInstanceNamePrefix() {
+        return "REG";
     }
 
     @Override

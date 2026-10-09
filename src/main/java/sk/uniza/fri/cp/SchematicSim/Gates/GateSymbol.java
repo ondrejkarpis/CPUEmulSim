@@ -4,6 +4,7 @@ import javafx.geometry.Point2D;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.Pane;
+import javafx.scene.text.Text;
 import sk.uniza.fri.cp.SchematicSim.Item;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
@@ -13,6 +14,7 @@ import sk.uniza.fri.cp.SchematicSim.Wire.Wire;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +30,12 @@ import java.util.Map;
 public abstract class GateSymbol extends Item {
 
     private List<Pin> pins;
+
+    /** Názov inštancie súčiastky na schéme (napr. REG1) - null pre súčiastky bez názvu. */
+    private String instanceName;
+
+    /** Textová značka na tele súčiastky, ktorá zobrazuje {@link #instanceName}. */
+    private Text nameLabel;
 
     /**
      * Bezparametrický konštruktor pre ItemPicker (paletku).
@@ -94,6 +102,45 @@ public abstract class GateSymbol extends Item {
 
     public abstract String getShortDescription();
 
+    /**
+     * Prefix názvu inštancie (napr. {@code REG} pre register). Súčiastky, ktoré majú
+     * automaticky číslovaný názov na schéme, ho prekryjú; predvolene {@code null}
+     * (súčiastka sa čísluje iba vtedy, ak je prefix nastavený).
+     */
+    public String getInstanceNamePrefix() {
+        return null;
+    }
+
+    /**
+     * Názov inštancie súčiastky na schéme (napr. {@code REG1}), alebo {@code null}
+     * ak súčiastka názov nemá.
+     */
+    public String getInstanceName() {
+        return this.instanceName;
+    }
+
+    /**
+     * Nastavenie názvu inštancie a jeho premietnutie do textovej značky na tele súčiastky.
+     */
+    public void setInstanceName(String instanceName) {
+        this.instanceName = instanceName;
+        if (this.nameLabel != null && instanceName != null) {
+            this.nameLabel.setText(instanceName);
+        }
+    }
+
+    /**
+     * Zaregistrovanie textovej značky, ktorá bude zobrazovať názov inštancie súčiastky
+     * (napr. {@code REG1}). Volá sa z {@link #drawBody()}; ak už je názov pridelený,
+     * rovno sa do značky zapíše.
+     */
+    protected void registerNameLabel(Text label) {
+        this.nameLabel = label;
+        if (this.instanceName != null) {
+            label.setText(this.instanceName);
+        }
+    }
+
     public List<Pin> getPins() {
         return pins;
     }
@@ -113,15 +160,21 @@ public abstract class GateSymbol extends Item {
      * ukladá výslednú mapu genericky, takže pridanie novej súčiastky nevyžaduje zmeny v loaderi.
      */
     public Map<String, String> saveProperties() {
-        return Collections.emptyMap();
+        if (this.instanceName == null) return Collections.emptyMap();
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("name", this.instanceName);
+        return properties;
     }
 
     /**
      * Obnovenie vlastností súčiastky po načítaní schémy. Volá sa vždy po vytvorení hradla
      * reflexiou a pred pripájaním vodičov (zbernica si tak najskôr vytvorí svoje odbočky,
-     * aby sa na ne dali pripojiť vodiče podľa indexu pinu). Predvolene no-op.
+     * aby sa na ne dali pripojiť vodiče podľa indexu pinu). Predvolene obnoví iba názov
+     * inštancie; potomkovia musia prekrytie riešiť cez {@code super.loadProperties(...)}.
      */
     public void loadProperties(Map<String, String> properties) {
+        String name = properties.get("name");
+        if (name != null) setInstanceName(name);
     }
 
     public Point2D getGridPos() {

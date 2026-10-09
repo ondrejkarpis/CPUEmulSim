@@ -112,9 +112,12 @@ public class Encoder83 extends GateSymbol {
         pane.getChildren().add(body);
 
         Text title = new Text("ENCODER");
-        title.setLayoutX((GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0);
         title.setLayoutY(-cell * 0.2);
         title.setFont(Font.font(cell * 0.6));
+        title.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0,
+                title.boundsInLocalProperty()));
+        registerNameLabel(title);
         pane.getChildren().add(title);
 
         // EI nad prvým dátovým riadkom
@@ -200,6 +203,11 @@ public class Encoder83 extends GateSymbol {
 
     @Override
     public String getName() {
+        return "KOD";
+    }
+
+    @Override
+    public String getInstanceNamePrefix() {
         return "KOD";
     }
 

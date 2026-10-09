@@ -140,9 +140,12 @@ public class Ram8k extends GateSymbol {
         pane.getChildren().add(body);
 
         Text title = new Text("RAM 8k×8");
-        title.setLayoutX((GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0);
         title.setLayoutY(-cell * 0.2);
         title.setFont(Font.font(cell * 0.6));
+        title.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0,
+                title.boundsInLocalProperty()));
+        registerNameLabel(title);
         pane.getChildren().add(title);
 
         // lave popisy: D0..D7
@@ -254,6 +257,11 @@ public class Ram8k extends GateSymbol {
     @Override
     public String getName() {
         return "RAM 8k";
+    }
+
+    @Override
+    public String getInstanceNamePrefix() {
+        return "RAM";
     }
 
     @Override

@@ -39,6 +39,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -716,7 +717,10 @@ public class SchematicSheet extends ScrollPane {
         clipboardBaseX = minX;
         clipboardBaseY = minY;
         for (GateSymbol gate : gates) {
-            clipboardGates.add(new CopiedGate(gate, gate.saveProperties(),
+            // názov inštancie sa nekopíruje - pri vložení dostane klon nové najmenšie voľné číslo
+            Map<String, String> properties = new LinkedHashMap<>(gate.saveProperties());
+            properties.remove("name");
+            clipboardGates.add(new CopiedGate(gate, properties,
                     gate.getGridPosX() - minX, gate.getGridPosY() - minY));
         }
 
@@ -1017,10 +1021,35 @@ public class SchematicSheet extends ScrollPane {
 
     public boolean addItem(Object item) {
         hasChanged = true;
+        if (item instanceof GateSymbol) {
+            GateSymbol gate = (GateSymbol) item;
+            String prefix = gate.getInstanceNamePrefix();
+            if (prefix != null && gate.getInstanceName() == null) {
+                gate.setInstanceName(nextComponentName(prefix));
+            }
+        }
         if (item instanceof Wire) {
             ((Wire) item).setDebugColored(this.debugWires.get());
         }
         return layersManager.add(item);
+    }
+
+    /**
+     * Najmenšie nepoužité číslo pre daný prefix názvu medzi súčiastkami na ploche
+     * (napr. pre {@code REG} vráti {@code REG3}, ak sú použité {@code REG1} a {@code REG2}).
+     */
+    private String nextComponentName(String prefix) {
+        Set<Integer> used = new HashSet<>();
+        for (GateSymbol gate : getGates()) {
+            String name = gate.getInstanceName();
+            if (name != null && name.startsWith(prefix)) {
+                String suffix = name.substring(prefix.length());
+                if (suffix.matches("\\d+")) used.add(Integer.parseInt(suffix));
+            }
+        }
+        int index = 1;
+        while (used.contains(index)) index++;
+        return prefix + index;
     }
 
     public boolean removeItem(Object item) {

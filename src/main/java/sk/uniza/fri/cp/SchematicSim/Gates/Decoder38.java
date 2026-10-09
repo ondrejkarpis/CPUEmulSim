@@ -103,9 +103,12 @@ public class Decoder38 extends GateSymbol {
         pane.getChildren().add(body);
 
         Text title = new Text("DECODER");
-        title.setLayoutX((GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0);
         title.setLayoutY(-cell * 0.2);
         title.setFont(Font.font(cell * 0.6));
+        title.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> (GRID_WIDTH * cell - title.getBoundsInLocal().getWidth()) / 2.0,
+                title.boundsInLocalProperty()));
+        registerNameLabel(title);
         pane.getChildren().add(title);
 
         int[] inputRows = {1, 2, 3, 8};
@@ -162,6 +165,11 @@ public class Decoder38 extends GateSymbol {
 
     @Override
     public String getName() {
+        return "DEK";
+    }
+
+    @Override
+    public String getInstanceNamePrefix() {
         return "DEK";
     }
 
