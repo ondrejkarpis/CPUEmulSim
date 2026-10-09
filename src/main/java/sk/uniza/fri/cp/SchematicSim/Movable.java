@@ -4,9 +4,13 @@ import javafx.event.EventHandler;
 import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
 import javafx.scene.Cursor;
+import javafx.scene.Node;
 import javafx.scene.input.MouseEvent;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+import sk.uniza.fri.cp.SchematicSim.Wire.WireJunction;
+
+import java.util.ArrayList;
 
 /**
  * Objekt s ktorým je možné pohybovať pomocou kurzora na ploche schémy, so snapovaním na mriežku.
@@ -28,6 +32,18 @@ public abstract class Movable extends HighlightGroup {
     private int dragLastGridX;
     private int dragLastGridY;
 
+    /**
+     * Príznak práve prebiehajúceho presunu súčiastky. Kým je nastavený, spájače
+     * neodstraňujú nulové vodiče ani nezlúčia kolineárne vodiče ({@link WireJunction}) -
+     * počas ťahu tak vodič nulovej dĺžky nezmizne predčasne. Priestor sa vyrieši
+     * až po pustení myši ({@link #finishComponentDrag()}).
+     */
+    private static boolean componentDragging;
+
+    public static boolean isComponentDragging() {
+        return componentDragging;
+    }
+
     private final EventHandler<MouseEvent> onMousePressedEventHandler = event -> {
         if (!event.isPrimaryButtonDown()) return;
         if (sheet != null && !sheet.isEditingEnabled()) return;
@@ -42,6 +58,7 @@ public abstract class Movable extends HighlightGroup {
         if (!event.isPrimaryButtonDown()) return;
         if (sheet != null && !sheet.isEditingEnabled()) return;
 
+        componentDragging = true;
         setCursor(Cursor.DEFAULT);
 
         if (nodeOffsetX == -1) {
@@ -86,15 +103,37 @@ public abstract class Movable extends HighlightGroup {
         event.consume();
     };
 
+    /**
+     * Po pustení myši (koniec presunu) sa vyriešia spájače odložené počas ťahu -
+     * vodiče nulovej dĺžky sa odstránia a zvyšné kolineárne vodiče sa spoja.
+     */
+    private final EventHandler<MouseEvent> onMouseReleasedEventHandler = event -> {
+        if (!componentDragging) return;
+        componentDragging = false;
+        finishComponentDrag();
+    };
+
+    private void finishComponentDrag() {
+        SchematicSheet currentSheet = getSheet();
+        if (currentSheet == null) return;
+
+        for (Node node : new ArrayList<>(currentSheet.getJunctionsLayer().getChildren())) {
+            if (node instanceof WireJunction) WireJunction.markDirty((WireJunction) node);
+        }
+        WireJunction.processNow();
+    }
+
     public Movable(SchematicSheet sheet) {
         this.sheet = sheet;
         this.addEventHandler(MouseEvent.MOUSE_PRESSED, onMousePressedEventHandler);
         this.addEventHandler(MouseEvent.MOUSE_DRAGGED, onMouseDraggedEventHandler);
+        this.addEventHandler(MouseEvent.MOUSE_RELEASED, onMouseReleasedEventHandler);
     }
 
     public void makeImmovable() {
         this.removeEventHandler(MouseEvent.MOUSE_PRESSED, onMousePressedEventHandler);
         this.removeEventHandler(MouseEvent.MOUSE_DRAGGED, onMouseDraggedEventHandler);
+        this.removeEventHandler(MouseEvent.MOUSE_RELEASED, onMouseReleasedEventHandler);
     }
 
     public void moveBy(double deltaX, double deltaY) {

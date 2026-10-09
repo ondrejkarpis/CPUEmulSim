@@ -9,6 +9,7 @@ import javafx.scene.shape.Circle;
 import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Item;
+import sk.uniza.fri.cp.SchematicSim.Movable;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -263,24 +264,15 @@ public class WireJunction extends Joint implements Connectable {
             Point2D dir2 = legDirection(junction, end2, wire2);
 
             // nulový ramenný vektor = vodič má nulovú dĺžku (obe konce v bode spájača);
-            // vodič v ťahu/náhľade sa zatiaľ nesmie zmazať - inak by reconcile odstránil
-            // rozpracovanú odbočku hneď po stlačení (ešte pred prvým pohybom myši)
+            // vodič v ťahu/náhľade (alebo počas presunu súčiastky) sa zatiaľ nesmie
+            // zmazať - inak by reconcile odstránil rozpracovanú odbočku hneď po stlačení
+            // (alebo by počas ťahu predčasne zmizol vodič, ktorý sa práve skracuje na nulu)
             if (dir1.magnitude() < EPS) {
-                if (isTemporary(wire1)) {
-                    junction.updateVisibility();
-                    return;
-                }
-                wire1.delete();
-                markDirty(junction);
+                removeZeroLength(junction, wire1, end1);
                 return;
             }
             if (dir2.magnitude() < EPS) {
-                if (isTemporary(wire2)) {
-                    junction.updateVisibility();
-                    return;
-                }
-                wire2.delete();
-                markDirty(junction);
+                removeZeroLength(junction, wire2, end2);
                 return;
             }
 
@@ -298,6 +290,45 @@ public class WireJunction extends Joint implements Connectable {
         junction.updateVisibility();
     }
 
+    /**
+     * Odstránenie vodiča s nulovou dĺžkou na spájači. Ak je jeho druhý koniec na
+     * splynutom spájači (typicky stred Z-vodiča vo chvíli, keď obe vodorovné časti
+     * zosunú do jednej priamky), spájače sa najprv zlúčia - zvyšné dva vodiče sa tak
+     * stretnú v jednom bode a reconcile ich potom spojí do jednej priamky.
+     */
+    private static void removeZeroLength(WireJunction junction, Wire wire, WireEnd end) {
+        if (isTemporary(wire)) {
+            junction.updateVisibility();
+            return;
+        }
+
+        WireEnd other = wire.getEnds()[0] == end ? wire.getEnds()[1] : wire.getEnds()[0];
+        WireJunction otherJunction = other.getJunction();
+
+        wire.delete();
+
+        if (otherJunction != null && otherJunction != junction && !otherJunction.isRemoved()
+                && otherJunction.getConnectionPoint().distance(junction.getConnectionPoint()) < EPS) {
+            collapseJunction(junction, otherJunction);
+        }
+        markDirty(junction);
+    }
+
+    /**
+     * Zlúčenie splynutého spájača {@code source} do {@code target}: presunie všetky
+     * jeho konce na {@code target} a {@code source} zničí.
+     */
+    private static void collapseJunction(WireJunction target, WireJunction source) {
+        if (target == source || target.isRemoved() || source.isRemoved()) return;
+
+        for (WireEnd end : new ArrayList<>(source.getConnectedEnds())) {
+            end.disconnect();
+            end.connect(target);
+        }
+        destroy(source);
+        markDirty(target);
+    }
+
     /** Smer ramena vodiča od spájača - smer na DRUHÝ koniec vodiča. */
     private static Point2D legDirection(WireJunction junction, WireEnd end, Wire wire) {
         WireEnd other = wire.getEnds()[0] == end ? wire.getEnds()[1] : wire.getEnds()[0];
@@ -306,21 +337,22 @@ public class WireJunction extends Joint implements Connectable {
     }
 
     /**
+     * Vodič, ktorý sa práve ťahá, je rozpracovaný, alebo sa práve presúva súčiastka.
+     * Počas toho ho reconcile nesmie zmazať ako nulový ani zlúčiť - až po pustení myši
+     * sa jeho geometria usadí a spájače sa prepočítajú znova.
+     */
+    private static boolean isTemporary(Wire wire) {
+        return wire == null || Pin.getInProgressWire() == wire
+                || wire.isPreview() || WireEnd.isGrabbing(wire)
+                || Movable.isComponentDragging();
+    }
+
+    /**
      * Zlúčenie dvoch kolínkových vodičov do jedného. ZACHOVÁ sa vodič {@code keep}
      * (aj s jeho koncom na spájači); vodič {@code drop} sa zruší a jeho voľný koniec
      * sa prepojí na cieľ pôvodného konca {@code dropEnd} (pin alebo iný spájač),
      * prípadne sa presunie na jeho pozíciu. Spájač sa zničí.
      */
-    /**
-     * Vodič, ktorý sa práve ťahá alebo sa ešte ukazuje ako náhľad. Počas toho ho
-     * reconcile nesmie zmazať ako nulový ani zlúčiť - až po pustení myši sa
-     * jeho geometria usadí a spájače sa prepočítajú znova.
-     */
-    private static boolean isTemporary(Wire wire) {
-        return wire == null || Pin.getInProgressWire() == wire
-                || wire.isPreview() || WireEnd.isGrabbing(wire);
-    }
-
     private static void merge(WireJunction junction, Wire keep, WireEnd keepEnd, Wire drop, WireEnd dropEnd) {
         // počas náhľadu/ťahu sa nemá zlúčovať - dokončenie ťahu prepočíta znova
         if (isTemporary(keep) || isTemporary(drop)) return;
