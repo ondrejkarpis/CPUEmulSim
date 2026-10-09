@@ -103,6 +103,9 @@ public class SchematicSheet extends ScrollPane {
      */
     private static final double WIRE_DROP_TOLERANCE = 5;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
+    //pan sa spustí len vtedy, ak stlačenie začalo na prázdnej ploche (nie na súčiastke,
+    //vodiči, spájači či pine) - inak by pri začatí ťahu prvku plocha o kúsok ušla
+    private boolean panAllowed = false;
     private final Group contentGroup;
 
     private final EventHandler<MouseDragEvent> onMouseDragEnteredHandle = event -> {
@@ -287,12 +290,18 @@ public class SchematicSheet extends ScrollPane {
         //fáze MOUSE_PRESSED spotrebuje (otvorenie kontextového menu), kotva má aktuálnu polohu.
         //Pri bublinovom setOnMousePressed by po pravom kliknutí bola kotva zastaraná a následný
         //minimálny ťah by schémy posunul o celú vzdialenosť od staršej polohy.
-        scrollContent.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> lastMouseCoordinates.set(new Point2D(event.getX(), event.getY())));
+        scrollContent.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            lastMouseCoordinates.set(new Point2D(event.getX(), event.getY()));
+            panAllowed = isOnWireDropSurface(event.getPickResult().getIntersectedNode());
+        });
 
         scrollContent.setOnMouseDragged(event -> {
             //pan sa nepoužíva s pravým tlačidlom - po zobrazení kontextového menu by pohyb myši
             //(ešte so stlačeným tlačidlom) posúval schému a nie výber položky menu
             if (event.getButton() == MouseButton.SECONDARY) return;
+            //pan len ak stlačenie začalo na prázdnej ploche; ťah súčiastky/vodiča/spájača/pinu
+            //(aj začatie vetvy z vodiča) plochu neposúva
+            if (!panAllowed) return;
             //delta proti poslednej polohe (nie proti bodu stlačenia) - inak by sa aplikoval
             //celý ťah od stlačenia pri KAŽDOM drag evente a plocha by utekala a menila smer
             double deltaX = event.getX() - lastMouseCoordinates.get().getX();
