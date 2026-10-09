@@ -98,10 +98,10 @@ public class SchematicSheet extends ScrollPane {
 
     /**
      * Vzdialenosť (v bodoch schémy) medzi pustením konca vodiča a najbližším segmentom,
-     * pri ktorej ešte vznikne spoj, ak pick netrafil samotný vodič. Pri priblížení sa
-     * prepočíta tak, aby bol dosah približne rovnaký na obrazovke.
+     * pri ktorej ešte vznikne spoj, ak pick netrafil samotný vodič. Rovnaká ako pri
+     * pinoch a spájačoch (polovica mriežky = 5 px).
      */
-    private static final double WIRE_DROP_TOLERANCE = 12;
+    private static final double WIRE_DROP_TOLERANCE = 5;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
     private final Group contentGroup;
 
@@ -479,14 +479,11 @@ public class SchematicSheet extends ScrollPane {
 
     /**
      * Najbližší vodič (okrem {@code exclude}) k bodu - pre pustenie konca vodiča
-     * v okolí na prázdnej ploche. Tolerancia sa pri priblížení škáluje, aby sa
-     * tenký vodič ľahšie trafili aj pri zmenšenej ploche.
+     * v okolí na prázdnej ploche. Tolerancia je {@link #WIRE_DROP_TOLERANCE} (5 px),
+     * rovnaká ako pri pinoch a spájačoch.
      */
     private Wire findNearestWire(Wire exclude, Point2D sheetXY) {
-        double scale = Math.max(getAppliedScale(), 0.5);
-        double tolerance = Math.min(
-                Math.max(WIRE_DROP_TOLERANCE / scale, WIRE_DROP_TOLERANCE),
-                gridSystem.getSizeMin());
+        double tolerance = WIRE_DROP_TOLERANCE;
 
         Wire bestWire = null;
         double bestDist = Double.MAX_VALUE;
