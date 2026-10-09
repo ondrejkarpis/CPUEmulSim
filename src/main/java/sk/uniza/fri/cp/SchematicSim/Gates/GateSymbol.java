@@ -132,12 +132,15 @@ public abstract class GateSymbol extends Item {
 
     /**
      * Skontroluje a aktualizuje aktuálnu hodnotu na vstupnom pine podľa potenciálu, ku ktorému je pripojený.
-     * Nepripojené vstupy sa (rovnako ako v origináli) správajú náhodne - modeluje to plávajúci vstup.
+     * Plávajúci vstup (High-Z) sa správa náhodne - náhoda je však stabilná, kým sa stav
+     * signálu nemení (generuje ju {@link Potential#getFloatingValue()}), takže vstup nebliká
+     * pri každom kroku simulácie.
      */
     public boolean isHigh(Pin inputPin) {
         if (inputPin == null || !inputPin.isConnected()) return false;
 
-        Potential.Value value = inputPin.getPotential() != null ? inputPin.getPotential().getValue() : Potential.Value.NC;
+        Potential potential = inputPin.getPotential();
+        Potential.Value value = potential != null ? potential.getValue() : Potential.Value.NC;
 
         if (value == Potential.Value.HIGH) {
             inputPin.setState(Pin.PinState.HIGH);
@@ -145,12 +148,9 @@ public abstract class GateSymbol extends Item {
         } else if (value == Potential.Value.LOW) {
             inputPin.setState(Pin.PinState.LOW);
         } else {
-            if (Math.random() < 0.5) {
-                inputPin.setState(Pin.PinState.HIGH);
-                return true;
-            } else {
-                inputPin.setState(Pin.PinState.LOW);
-            }
+            boolean high = potential != null && potential.getFloatingValue();
+            inputPin.setState(high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            return high;
         }
         return false;
     }
@@ -158,7 +158,8 @@ public abstract class GateSymbol extends Item {
     public boolean isLow(Pin inputPin) {
         if (inputPin == null || !inputPin.isConnected()) return false;
 
-        Potential.Value value = inputPin.getPotential() != null ? inputPin.getPotential().getValue() : Potential.Value.NC;
+        Potential potential = inputPin.getPotential();
+        Potential.Value value = potential != null ? potential.getValue() : Potential.Value.NC;
 
         if (value == Potential.Value.LOW) {
             inputPin.setState(Pin.PinState.LOW);
@@ -166,12 +167,9 @@ public abstract class GateSymbol extends Item {
         } else if (value == Potential.Value.HIGH) {
             inputPin.setState(Pin.PinState.HIGH);
         } else {
-            if (Math.random() < 0.5) {
-                inputPin.setState(Pin.PinState.HIGH);
-            } else {
-                inputPin.setState(Pin.PinState.LOW);
-                return true;
-            }
+            boolean low = !(potential != null && potential.getFloatingValue());
+            inputPin.setState(low ? Pin.PinState.LOW : Pin.PinState.HIGH);
+            return low;
         }
         return false;
     }

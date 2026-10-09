@@ -28,6 +28,7 @@ public class Potential {
     private Potential parent2;
     private Potential child;
     private volatile Value value;
+    private Boolean floatingHigh;
     private PinType type;
 
     // skrat
@@ -98,12 +99,33 @@ public class Potential {
 
         this.updateType();
         this.setValue(Value.NC);
+        this.floatingHigh = null;
 
         if (oldChild != null) oldChild.update();
     }
 
     public synchronized Value getValue() {
         return value;
+    }
+
+    /**
+     * Stabilná náhodná hodnota plávajúceho potenciálu ({@link Value#NC} = High-Z). Kým
+     * potenciál ostáva plávajúci, vracia tú istú vygenerovanú hodnotu - vstupy citlivé
+     * na plávajúci stav tak neblikajú pri každom kroku simulácie. Pri prechode na
+     * definovanú úroveň (0/1) sa náhoda zahodí, takže ďalší prechod do High-Z vygeneruje
+     * novú hodnotu.
+     *
+     * @return {@code true} ak má plávajúci potenciál náhodne predstavovať HIGH
+     */
+    public synchronized boolean getFloatingValue() {
+        if (this.value != Value.NC) {
+            this.floatingHigh = null;
+            return this.value == Value.HIGH;
+        }
+        if (this.floatingHigh == null) {
+            this.floatingHigh = Math.random() < 0.5;
+        }
+        return this.floatingHigh;
     }
 
     public synchronized void addValueListener(Runnable listener) {
@@ -186,6 +208,8 @@ public class Potential {
         } else {
             this.value = newVal;
         }
+
+        if (this.value != Value.NC) this.floatingHigh = null;
 
         this.unhighlightShortCircuitNodes();
 
