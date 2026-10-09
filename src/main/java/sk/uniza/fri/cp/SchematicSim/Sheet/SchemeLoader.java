@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -54,6 +55,29 @@ public class SchemeLoader {
      * @return true ak sa uloženie podarilo.
      */
     public static boolean save(File file, SchematicSheet sheet) {
+        XMLOutputter xmlOutputter = new XMLOutputter();
+        xmlOutputter.setFormat(Format.getPrettyFormat());
+
+        try (BufferedWriter bw = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+            xmlOutputter.output(createDocument(sheet), bw);
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Serializácia aktuálneho stavu schémy do XML reťazca - snímka pre undo/redo.
+     */
+    public static String saveToString(SchematicSheet sheet) {
+        XMLOutputter xmlOutputter = new XMLOutputter();
+        xmlOutputter.setFormat(Format.getPrettyFormat());
+        return xmlOutputter.outputString(createDocument(sheet));
+    }
+
+    private static Document createDocument(SchematicSheet sheet) {
         Document jdomDoc = new Document();
         Element rootElement = new Element("Scheme");
         rootElement.setAttribute("ver", VERSION);
@@ -104,17 +128,7 @@ public class SchemeLoader {
         }
         rootElement.addContent(wiresElement);
 
-        XMLOutputter xmlOutputter = new XMLOutputter();
-        xmlOutputter.setFormat(Format.getPrettyFormat());
-
-        try (BufferedWriter bw = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            xmlOutputter.output(jdomDoc, bw);
-            return true;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return jdomDoc;
     }
 
     private static void appendWireEnd(Element wireElement, String name, WireEnd end) {
@@ -162,7 +176,29 @@ public class SchemeLoader {
     public static boolean load(File file, SchematicSheet sheet) {
         SAXBuilder builder = new SAXBuilder();
         try {
-            Document jdomDoc = builder.build(file);
+            return loadDocument(builder.build(file), sheet);
+        } catch (JDOMException | IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Načítanie stavu schémy z XML reťazca (snímka pre undo/redo). Rovnaká rekonštrukcia
+     * plochy ako {@link #load(File, SchematicSheet)} - pred načítaním sa obsah plochy vymaže.
+     */
+    public static boolean loadFromString(String xml, SchematicSheet sheet) {
+        SAXBuilder builder = new SAXBuilder();
+        try {
+            return loadDocument(builder.build(new StringReader(xml)), sheet);
+        } catch (JDOMException | IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private static boolean loadDocument(Document jdomDoc, SchematicSheet sheet) {
+        try {
             Element rootElement = jdomDoc.getRootElement();
             if (!"Scheme".equalsIgnoreCase(rootElement.getName())) return false;
 
@@ -223,11 +259,21 @@ public class SchemeLoader {
                         stillPending.add(entry);
                     }
                 }
+                // nevyriešené vodiče sa ponechajú na ploche (voľný koniec s pozíciou - vodič
+                // rozpracovaný/pustený v prázdnom priestore). Odstránia sa len tie, ktorých
+                // koniec mal byť na pine, ktorý sa nenašiel (nekorektný súbor).
                 for (WireEntry entry : stillPending) {
-                    entry.wire.delete();
+                    if (hasUnresolvedPinEnd(entry)) {
+                        entry.wire.delete();
+                    } else {
+                        positionUnconnectedEnd(entry.wire.getEnds()[0], entry.startElement);
+                        positionUnconnectedEnd(entry.wire.getEnds()[1], entry.endElement);
+                        entry.wire.settleToGrid();
+                        loadedWires.add(entry.wire);
+                    }
                 }
             }
-        } catch (JDOMException | IOException | InvocationTargetException | InstantiationException
+        } catch (InvocationTargetException | InstantiationException
                 | IllegalAccessException | ClassNotFoundException | NoSuchMethodException
                 | NullPointerException e) {
             e.printStackTrace();
@@ -235,6 +281,14 @@ public class SchemeLoader {
         }
 
         return true;
+    }
+
+    /**
+     * @return true ak niektorý koniec vodiča odkazuje na pin (nevyriešený pin sa nenašiel).
+     */
+    private static boolean hasUnresolvedPinEnd(WireEntry entry) {
+        return (entry.startElement != null && entry.startElement.getChildText("gateId") != null)
+                || (entry.endElement != null && entry.endElement.getChildText("gateId") != null);
     }
 
     /**
@@ -276,7 +330,29 @@ public class SchemeLoader {
         resolveJunctionEnd(ends[0], startElement, loadedWires, hubByKey);
         resolveJunctionEnd(ends[1], endElement, loadedWires, hubByKey);
 
+        // voľné konce so zadanou pozíciou (vodič pustený v prázdnom priestore) sa umiestnia
+        // na uložené súradnice; ak sa neskôr (druhý prechod) pripoja na spájač, ignoruje sa
+        positionUnconnectedEnd(ends[0], startElement);
+        positionUnconnectedEnd(ends[1], endElement);
+
         return new WireEntry(wire, startElement, endElement);
+    }
+
+    /**
+     * Umiestnenie nepripojeného konca vodiča na uloženú pozíciu (element so súradnicami x/y).
+     */
+    private static void positionUnconnectedEnd(WireEnd end, Element endElement) {
+        if (end == null || end.isConnected() || endElement == null) return;
+        Element xElement = endElement.getChild("x");
+        Element yElement = endElement.getChild("y");
+        if (xElement == null || yElement == null) return;
+
+        try {
+            double x = Double.parseDouble(xElement.getText());
+            double y = Double.parseDouble(yElement.getText());
+            end.moveTo(x, y);
+        } catch (NumberFormatException | NullPointerException ignored) {
+        }
     }
 
     private static Map<String, String> readProperties(Element gateElement) {
@@ -296,7 +372,7 @@ public class SchemeLoader {
         if (endElement == null) return null;
 
         String gateId = endElement.getChildText("gateId");
-        if (gateId == null) return null; // voľný koniec - nenačítavame vodiče so slobodnými koncami
+        if (gateId == null) return null; // voľný koniec - pozícia sa nastaví neskôr
 
         GateSymbol gate = gatesById.get(gateId);
         if (gate == null) return null;
