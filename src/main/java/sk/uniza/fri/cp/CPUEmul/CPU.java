@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.security.InvalidParameterException;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -54,7 +53,12 @@ public class CPU extends Thread {
 //    private int UsbITCheckSkipped = 0; //preskocenie kazdych x cyklov pred citanim IT cez USB (USB je prilis pomale)
 
 	/** Synchronizacne nastroje */
-	private CountDownLatch cdlHalt; //pasivne cakanie pri pozastaveni vykonavania alebo cakani na spustenie
+	//pasivne cakanie pri pozastaveni vykonavania alebo cakani na spustenie - monitor s priznakom
+	//zobudenia (namiesto CountDownLatch vytvaraneho az pri cakani, kde sa zobudenie z GUI, ktore
+	//prislo tesne pred vytvorenim latchu, stratilo a CPU ostalo navzdy zaseknute)
+	private final Object haltLock = new Object();
+	private boolean haltWakeRequested; //chranene haltLock
+	private boolean halted;            //CPU prave caka v haltAwait() - chranene haltLock
     private final Semaphore semKey;   //semafor na pristup ku stlacenej klavese
 
 	/** Registre */
@@ -134,6 +138,11 @@ public class CPU extends Thread {
                 }
             }
 
+            //zmazanie zastaraleho priznaku prerusenia z predosleho Stop (prisiel, ked CPU necakalo
+            //v prerusitelnom volani) - inak by prve cakanie noveho behu hned vyhodilo vynimku
+            //a beh by sa sam ukoncil
+            Thread.interrupted();
+
             Instruction nextInstruction;
             boolean it = false; //interrupt
 
@@ -158,6 +167,7 @@ public class CPU extends Thread {
                 try {
                     //kontrola nastavenia breaku v programe
                     if (program.isSetBreak(regPC - 1) || f_pause) {
+                        clearHaltWake();
                         updateMessage("Vykonávanie pozastavené");
                         state.setValue(CPUStates.Paused);
                         this.f_pause = true;
@@ -256,7 +266,7 @@ public class CPU extends Thread {
             this.regPC = 0;
             this.isExecuting = true;
             this.f_pause = startPaused;
-            if (this.cdlHalt != null) cdlHalt.countDown();
+            wakeHalt();
         }
     }
 
@@ -274,7 +284,7 @@ public class CPU extends Thread {
     public void continueExecute(){
         if(this.f_pause) {
             f_pause = false;
-            if (cdlHalt != null) cdlHalt.countDown();
+            wakeHalt();
         }
 	}
 
@@ -283,7 +293,7 @@ public class CPU extends Thread {
      */
     public void step(){
         f_pause = true; //pri krokovani zastavit pred vykonanim dalsej inst.
-        if (cdlHalt != null) cdlHalt.countDown();
+        wakeHalt();
     }
 
     /**
@@ -292,8 +302,12 @@ public class CPU extends Thread {
     public void stopExecute(){
         if(this.isExecuting) {
             this.isExecuting = false;
-            if(this.cdlHalt != null) cdlHalt.countDown();
-            else interrupt();
+            synchronized (haltLock) {
+                //ak CPU caka v haltAwait(), staci ho zobudit; inak sa prerusi cakanie na zbernicu
+                //(ak sa CPU do haltAwait() prave chysta, prerusenie vyhodi wait() hned)
+                if (halted) wakeHalt();
+                else interrupt();
+            }
         }
     }
 
@@ -1094,6 +1108,7 @@ public class CPU extends Thread {
     private void microstepAwait(String msg) throws InterruptedException {
         //ak je zapnute mikrokrokovanie a zaroven sa aj krokuje
         if (isExecuting && f_microstep && f_pause) {
+            clearHaltWake();
             updateMessage(msg);
             state.setValue(CPUStates.Paused);
             haltAwait();
@@ -1107,9 +1122,36 @@ public class CPU extends Thread {
      * @throws InterruptedException Prerušenie počas čakania
      */
     private void haltAwait() throws InterruptedException {
-        cdlHalt = new CountDownLatch(1);
-        cdlHalt.await();
-        cdlHalt = null;
+        synchronized (haltLock) {
+            halted = true;
+            try {
+                while (!haltWakeRequested) haltLock.wait();
+                haltWakeRequested = false;
+            } finally {
+                halted = false;
+            }
+        }
+    }
+
+    /**
+     * Zrušenie zobudenia, ktoré prišlo ešte pred rozhodnutím CPU zastaviť (napr. Pokračovať
+     * kliknuté počas behu) - inak by nasledujúce zastavenie (breakpoint) hneď prebehlo.
+     * Volá sa v okamihu rozhodnutia o zastavení, pred haltAwait(); zobudenie po ňom sa už nestratí.
+     */
+    private void clearHaltWake() {
+        synchronized (haltLock) {
+            haltWakeRequested = false;
+        }
+    }
+
+    /**
+     * Zobudenie CPU čakajúceho v haltAwait(). Ak CPU ešte nečaká, zobudenie sa zapamätá.
+     */
+    private void wakeHalt() {
+        synchronized (haltLock) {
+            haltWakeRequested = true;
+            haltLock.notifyAll();
+        }
     }
 
     private long lastErrorMsgPrint = 0;
