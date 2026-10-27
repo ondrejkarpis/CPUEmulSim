@@ -224,6 +224,19 @@ public class CPU extends Thread {
                             alert.setHeaderText("Chyba prerušenia");
                             alert.show();
                         });
+                    } else if (!(e instanceof InterruptedException)) {
+                        //neocakavana chyba pri vykonavani - nesmie sa potichu prehltnut, inak sa
+                        //program bez akehokolvek hlasenia zastavi
+                        e.printStackTrace(System.err);
+                        String detail = "Inštrukcia: " + nextInstruction.getType().name()
+                                + " (adresa " + Short.toUnsignedInt((short) (regPC - 1)) + ")\n" + e;
+                        Platform.runLater(()->{
+                            Alert alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Chyba");
+                            alert.setHeaderText("Chyba pri vykonávaní programu");
+                            alert.setContentText(detail);
+                            alert.show();
+                        });
                     }
 
                     this.isExecuting = false;
