@@ -1193,7 +1193,18 @@ public class CPUController implements Initializable {
         parserTask.setOnFailed(new EventHandler<WorkerStateEvent>() {
             @Override
             public void handle(WorkerStateEvent event) {
-                InvalidCodeLinesException ex = (InvalidCodeLinesException) parserTask.getException();
+                Throwable failure = parserTask.getException();
+                program = null;
+                updateGUITableProgMemory();
+                lbStatus.setText("Chyba v kóde");
+
+                //neočakávaná chyba parsera - nesmie spadnúť na pretypovaní a ostať bez hlásenia
+                if(!(failure instanceof InvalidCodeLinesException)){
+                    if(failure != null) failure.printStackTrace(System.err);
+                    writeConsoleLn("[Parser] Neočakávaná chyba pri spracovaní kódu: " + failure, "red");
+                    return;
+                }
+                InvalidCodeLinesException ex = (InvalidCodeLinesException) failure;
 
                 //zvyraznenie riadkov s chybovym kodom
                 for (int line :
@@ -1206,12 +1217,6 @@ public class CPUController implements Initializable {
                         ex.getErrors()) {
                     writeConsoleLn("[Parser] " + msg, "red");
                 }
-
-                program = null;
-                updateGUITableProgMemory();
-
-                //zobrazenie stavu
-                lbStatus.setText("Chyba v kóde");
             }
         });
 

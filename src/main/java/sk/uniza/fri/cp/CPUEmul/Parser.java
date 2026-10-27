@@ -179,12 +179,14 @@ public class Parser extends Task<Program>{
                         if(label.matches("[iI][nN][tT].*")){
                             // Karpis - navestie musi byt int00 az int15
                             // alebo aj int00 az int0f
-                            if(label.matches("[iI][nN][tT]([0]\\d|[1][012345]|[0][abcdef])")){
+                            // (?i) v oboch vzoroch - napr. INT0a alebo int0A inak prešlo prvým
+                            // vzorom a padlo na parseInt("0a", 10) (NumberFormatException)
+                            if(label.matches("(?i)int(0\\p{XDigit}|1[0-5])")){
                                 //splna podmienky navestia pre prerusenie
                                 isInterruptLabel = true;
                                 int intNumber;
 
-                                if(label.matches("int0\\p{XDigit}")){
+                                if(label.matches("(?i)int0\\p{XDigit}")){
                                     // hexa
                                     intNumber = Integer.parseInt(label.substring(4,5), 16);
                                 } else {
@@ -232,6 +234,14 @@ public class Parser extends Task<Program>{
                 instructionMatcher = instructionPattern.matcher(line);
                 while (instructionMatcher.find()){
                     instructionParts.add(instructionMatcher.group());
+                }
+
+                //riadok bez jedineho tokenu (napr. iba ciarky alebo uvodzovky)
+                if(instructionParts.isEmpty()){
+                    addError("Neplatný riadok '" + line + "'", lineIndex);
+                    lineIndex++;
+                    line = br.readLine();
+                    continue;
                 }
 
                 //je instrukcia platna?
