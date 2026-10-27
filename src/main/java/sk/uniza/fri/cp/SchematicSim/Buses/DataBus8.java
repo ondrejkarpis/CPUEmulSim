@@ -814,6 +814,15 @@ public class DataBus8 extends BusSymbol {
     }
 
     @Override
+    public void delete() {
+        // zbernica CPU je singleton - bez odhlásenia by zmazaná zbernica (aj každá
+        // inštancia nahradená pri undo/redo či načítaní súboru) ďalej reagovala na CPU
+        getBus().dataBusProperty().removeListener(onDataBusChange);
+        getBus().controlBusProperty().removeListener(onControlBusChange);
+        super.delete();
+    }
+
+    @Override
     public int getGridWidth() {
         return RAIL_WIDTH;
     }
