@@ -1191,6 +1191,11 @@ public class SchematicSheet extends ScrollPane {
         isUndoRestoring = true;
         try {
             SchemeLoader.loadFromString(xml, this);
+            // obnovená plocha sa nemusí serializovať zhodne so snímkou (napr. voľný koniec
+            // vodiča po zmazanej súčiastke ostal mimo mriežky a pri načítaní sa zarovná).
+            // Bez tohto by hliadka rozdiel vyhodnotila ako novú zmenu - vložila by ju do
+            // histórie, zmazala redo a ďalšie undo by vracalo stále ten istý stav.
+            lastUndoSnapshot = serializeState();
         } finally {
             isUndoRestoring = false;
         }
