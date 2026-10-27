@@ -139,6 +139,12 @@ public class CPU extends Thread {
 
             state.setValue(CPUStates.Running);
 
+            //neaktivne riadiace signaly CPU (IT budi schema, ten sa nemeni), nahodna adresa a data
+            bus.setMW_(true);
+            bus.setMR_(true);
+            bus.setIW_(true);
+            bus.setIR_(true);
+            bus.setIA_(true);
             bus.setRandomAddress();
             bus.setRandomData();
 
@@ -983,22 +989,26 @@ public class CPU extends Thread {
         else
             bus.setMR_(false);
 
-        //cakanie na nastavenie dat na datovej zbernici
-        //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
+        //priznak citania sa zrusi aj pri zastaveni CPU pocas citania - inak by ostal aktivny
+        try {
+            //cakanie na nastavenie dat na datovej zbernici
+            //updateMessage("Cakanie na nastavenie dat");
+            this.waitForSteadySimulation(inst, true);
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //nacitaj data
-        microstepAwait("Nacitanie dat");
-        byte Rd = bus.getDataBus();
-        setRegisterVal(destRegName, Rd);
+            //nacitaj data
+            microstepAwait("Nacitanie dat");
+            byte Rd = bus.getDataBus();
+            setRegisterVal(destRegName, Rd);
 
-        //zrus priznak citania
-        microstepAwait("Zrusenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR"));
-        if(inst == enumInstructionsSet.INN)
-            bus.setIR_(true);
-        else
-            bus.setMR_(true);
+            microstepAwait("Zrusenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR"));
+        } finally {
+            //zrus priznak citania
+            if(inst == enumInstructionsSet.INN)
+                bus.setIR_(true);
+            else
+                bus.setMR_(true);
+        }
         // nahodne data
         bus.setRandomData();
 
@@ -1034,16 +1044,20 @@ public class CPU extends Thread {
         else
             bus.setMW_(false);
 
-        //updateMessage("Cakanie na nastavenie dat");
-        this.waitForSteadySimulation(inst, true);
-        if (!isExecuting) throw new InterruptedException("CPU stopped");
+        //priznak zapisu sa zrusi aj pri zastaveni CPU pocas zapisu - inak by ostal aktivny
+        try {
+            //updateMessage("Cakanie na nastavenie dat");
+            this.waitForSteadySimulation(inst, true);
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
 
-        //zrusenie priznaku
-        microstepAwait("Zrusenie priznaku ZAPISU");
-        if(inst == enumInstructionsSet.OUT)
-            bus.setIW_(true);
-        else
-            bus.setMW_(true);
+            microstepAwait("Zrusenie priznaku ZAPISU");
+        } finally {
+            //zrusenie priznaku
+            if(inst == enumInstructionsSet.OUT)
+                bus.setIW_(true);
+            else
+                bus.setMW_(true);
+        }
 
         //cakanie, aby sa nezapisali nespravne data
         this.waitForSteadySimulation(inst, false);
