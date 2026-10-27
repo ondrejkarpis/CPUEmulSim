@@ -172,6 +172,8 @@ public class CPU extends Thread {
                         state.setValue(CPUStates.Paused);
                         this.f_pause = true;
                         haltAwait();
+                        //zobudene tlacidlom Stop - instrukcia, na ktorej sa stalo, sa uz nevykona
+                        if (!isExecuting) break;
                     }
 
                     state.setValue(CPUStates.Running);
@@ -1112,6 +1114,8 @@ public class CPU extends Thread {
             updateMessage(msg);
             state.setValue(CPUStates.Paused);
             haltAwait();
+            //zobudene tlacidlom Stop - zvysok mikrokrokov sa uz nevykona (signaly uvolni finally v read/write)
+            if (!isExecuting) throw new InterruptedException("CPU stopped");
             state.setValue(CPUStates.Running);
         }
     }
