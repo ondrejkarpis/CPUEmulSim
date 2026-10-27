@@ -216,16 +216,17 @@ if (steadyState) {
     }
 
     public void addEvent(SheetEvent event) {
-        try {
-            // asynchrónne zapojenie - odstránenie eventu na pine, ktorý už nie je aktuálny
-            eventsQueue.removeIf(e -> e.getPin() != null && e.getPin().equals(event.getPin()));
-            eventsQueue.put(event);
-            // zneplatnenie idle ešte na vlákne, ktoré udalosť vložilo (napr. CPU pri IR/=0) - inak by
-            // simulácia mohla udalosť vybrať z frontu (front prázdny, idle ešte true) a CPU by
-            // v tom okne považovalo zbernicu za ustálenú a prečítalo staré/náhodné dáta
-            Bus.getBus().simulationProcessingStarts();
-        } catch (InterruptedException ignored) {
-        }
+        // asynchrónne zapojenie - odstránenie eventu na pine, ktorý už nie je aktuálny
+        eventsQueue.removeIf(e -> e.getPin() != null && e.getPin().equals(event.getPin()));
+        // offer() namiesto put(): front je neohraničený, takže nikdy nečaká, a hlavne nie je
+        // prerušiteľný - put() vo vlákne s nastaveným príznakom prerušenia (CPU zastavené počas
+        // čakania na zbernicu) vyhodí InterruptedException a udalosť by sa potichu stratila
+        // (napr. IR/=1 po zastavení by sa do schémy nedostal a signál by ostal v 0)
+        eventsQueue.offer(event);
+        // zneplatnenie idle ešte na vlákne, ktoré udalosť vložilo (napr. CPU pri IR/=0) - inak by
+        // simulácia mohla udalosť vybrať z frontu (front prázdny, idle ešte true) a CPU by
+        // v tom okne považovalo zbernicu za ustálenú a prečítalo staré/náhodné dáta
+        Bus.getBus().simulationProcessingStarts();
     }
 
     /**

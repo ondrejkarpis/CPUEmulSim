@@ -328,7 +328,7 @@ public class Bus{
      *
      * @param IT Nová hodnota signálu IT.
      */
-    public void setIT(boolean IT) {
+    synchronized public void setIT(boolean IT) {
         mapToControlBus("IT", IT);
     }
 
@@ -337,7 +337,7 @@ public class Bus{
      *
      * @param RY Nová hodnota signálu RY.
      */
-    public void setRY(boolean RY) {
+    synchronized public void setRY(boolean RY) {
         mapToControlBus("RY", RY);
     }
 
