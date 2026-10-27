@@ -52,9 +52,12 @@ public class SchematicSimulator {
                         setRunningQuietly(true);
 
                         // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
+                        // idle sa zneplatní PRED ohlásením behu - inak by CPU (čakajúce na štart
+                        // simulácie) videlo bežiacu simuláciu so starým idle=true a prečítalo by
+                        // zbernicu ešte pred počiatočným vyhodnotením
                         Bus.getBus().setEventsQueue(eventsQueue);
-                        Bus.getBus().simulationIsRunning(true);
                         Bus.getBus().simulationProcessingStarts(); // ešte nie je idle - počiatočné spracovanie
+                        Bus.getBus().simulationIsRunning(true);
 
                         // počiatočné vyhodnotenie - nahrádza powerSockets.forEach(PowerSocket::powerUp)
                         allGates.forEach(GateSymbol::reset);

@@ -1248,17 +1248,9 @@ public class CPUController implements Initializable {
     private void startExecution(){
         //ak cpu bezi
         if(this.cpu != null && this.cpu.isAlive()){
-            if (this.program.hasIOInstruction()) {
-                boolean wasRunning = schematicSheet.isSimulationRunning();
-                schematicSheet.powerOn();
-                if (!wasRunning)
-                    //ak bola simulacia vypnuta, pockaj chvilu na zahriatie
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-            }
+            //na rozbehnutie simulacie caka CPU vo svojom vlakne (Bus.waitForSimulationStart),
+            //GUI vlakno sa neuspava
+            if (this.program.hasIOInstruction()) schematicSheet.powerOn();
 
             this.cos_cpu.setUnused();
             this.cpu.reset();

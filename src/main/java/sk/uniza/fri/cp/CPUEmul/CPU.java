@@ -114,6 +114,9 @@ public class CPU extends Thread {
         this.setName("CPU_Thread");
 	}
 
+    /** Maximálne čakanie (ms) na rozbehnutie simulácie pri štarte programu. */
+    private static final long SIMULATION_START_TIMEOUT_MS = 2000;
+
     private long startInstExeTime = 0;
     private long endInstExeTime = 0;
 
@@ -142,6 +145,16 @@ public class CPU extends Thread {
             //v prerusitelnom volani) - inak by prve cakanie noveho behu hned vyhodilo vynimku
             //a beh by sa sam ukoncil
             Thread.interrupted();
+
+            //program so vstupno/vystupnymi instrukciami zapina simulaciu, ktora sa rozbieha
+            //asynchronne - pockaj na nu (ak sa nerozbehne, ohlasi sa chyba zbernice pri citani)
+            if (program.hasIOInstruction()) {
+                try {
+                    bus.waitForSimulationStart(SIMULATION_START_TIMEOUT_MS);
+                } catch (InterruptedException e) {
+                    //Stop pocas cakania - vykonavanie skonci podla isExecuting
+                }
+            }
 
             Instruction nextInstruction;
             boolean it = false; //interrupt
