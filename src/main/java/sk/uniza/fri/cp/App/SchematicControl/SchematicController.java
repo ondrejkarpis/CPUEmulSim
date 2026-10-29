@@ -105,6 +105,9 @@ public class SchematicController {
         //rozloženie okna
         SplitPane editableArea = new SplitPane(this.itemPicker, this.sheet);
         editableArea.setDividerPositions(0.13);
+        // pri zmene veľkosti okna si paletka drží šírku (mení sa iba plocha schémy);
+        // ručne sa dá šírka paletky stále meniť ťahaním deliacej čiary
+        SplitPane.setResizableWithParent(this.itemPicker, false);
         this.editableArea = editableArea;
 
         this.root = new BorderPane();
