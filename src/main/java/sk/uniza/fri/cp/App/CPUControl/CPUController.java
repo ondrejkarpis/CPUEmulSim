@@ -1329,7 +1329,7 @@ public class CPUController implements Initializable {
     private void onCPUPaused() {
         f_paused.setValue(true);
 
-        updateExecutionLine( program.getLineOfInstruction(cpu.getRegPC()-1) );
+        updateExecutionLine( program.getLineOfInstruction(cpu.getCurrentInstructionAddress()) );
 
         progressBar.progressProperty().unbind();
         progressBar.setProgress(0.5);
@@ -1353,7 +1353,7 @@ public class CPUController implements Initializable {
     private void onCPUWaiting(){
         f_paused.setValue(true);
 
-        updateExecutionLine( program.getLineOfInstruction(cpu.getRegPC()-1) );
+        updateExecutionLine( program.getLineOfInstruction(cpu.getCurrentInstructionAddress()) );
 
         progressBar.progressProperty().unbind();
         progressBar.setProgress(0.5);

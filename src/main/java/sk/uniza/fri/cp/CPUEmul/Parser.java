@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 public class Parser extends Task<Program>{
 
     private static final String LABEL_PATTERN = "^\\s*" + Regexes.rLabel + ":"; //identifikátor (nesmie začínať číslicou) a dvojbodka na začiatku riadku
+    private static final int MAX_INSTRUCTIONS = 65536; //PC je 16-bitovy bez znamienka: adresy 0..65535
     private static final String COMMENT_PATTERN = "(?m)(?:(?<!');|(?<=');(?!')).*$"; //vsetko za bodkociarkou po koniec riadku (okrem ';' ako znaku v uvodzovkach)
 
     //KOD
@@ -276,6 +277,12 @@ public class Parser extends Task<Program>{
                                 addError("Nesprávny druhý parameter inštrukcie '" + instructionParts.get(0) + "', povolený je iba reg. A", lineIndex);
                                 parametersError = true;
                             }
+                        }
+
+                        //PC je 16-bitovy (0..65535) - program moze mat najviac 65536 instrukcii (BYTE sa nepocita)
+                        if(!parametersError && codeInstruction != enumInstructionsSet.BYTE && instructions.size() >= MAX_INSTRUCTIONS){
+                            addError("Príliš veľa inštrukcií - maximálne " + MAX_INSTRUCTIONS + " (adresy 0 až " + (MAX_INSTRUCTIONS - 1) + ")", lineIndex);
+                            parametersError = true;
                         }
 
                         //ak je cela instrukcia aj s parametrami v poriadku, mozeme ju zaviest do programu (ak je aj chybny, kontroluje sa este spravnost navesti v instrukciach)

@@ -67,7 +67,8 @@ public class CPU extends Thread {
     volatile private byte regC;
     volatile private byte regD;
     volatile private short regMP;
-    volatile private short regPC;
+    volatile private short regPC; //16 bitov bez znamienka (0..65535) - pracovat cez Short.toUnsignedInt
+    volatile private int currentInstructionAddress; //adresa prave vykonavanej instrukcie (0..65535)
     volatile private short regSP;
     volatile private boolean flagCY;
     volatile private boolean flagIE;
@@ -175,11 +176,12 @@ public class CPU extends Thread {
             //vykonavaj pokial vlakno nebolo zrusene, je spustene vykonavanie a nie je koniec programu
             while (!isCancelled
                     && isExecuting
-                    && (nextInstruction = program.getInstruction(Short.toUnsignedInt(regPC++))) != null) {
+                    && (nextInstruction = program.getInstruction(currentInstructionAddress = Short.toUnsignedInt(regPC++))) != null) {
 
                 try {
-                    //kontrola nastavenia breaku v programe
-                    if (program.isSetBreak(regPC - 1) || f_pause) {
+                    //kontrola nastavenia breaku v programe (adresa bez znamienka - regPC-1 by pre
+                    //PC nad 32767 a po pretečení 65535 -> 0 dalo zápornú adresu)
+                    if (program.isSetBreak(currentInstructionAddress) || f_pause) {
                         clearHaltWake();
                         updateMessage("Vykonávanie pozastavené");
                         state.setValue(CPUStates.Paused);
@@ -254,7 +256,7 @@ public class CPU extends Thread {
                         //program bez akehokolvek hlasenia zastavi
                         e.printStackTrace(System.err);
                         String detail = "Inštrukcia: " + nextInstruction.getType().name()
-                                + " (adresa " + Short.toUnsignedInt((short) (regPC - 1)) + ")\n" + e;
+                                + " (adresa " + currentInstructionAddress + ")\n" + e;
                         Platform.runLater(()->{
                             Alert alert = new Alert(Alert.AlertType.ERROR);
                             alert.setTitle("Chyba");
@@ -279,6 +281,7 @@ public class CPU extends Thread {
     public void startExecute(boolean startPaused){
         if(!this.isExecuting && this.program != null) {
             this.regPC = 0;
+            this.currentInstructionAddress = 0;
             this.isExecuting = true;
             this.f_pause = startPaused;
             wakeHalt();
@@ -343,6 +346,7 @@ public class CPU extends Thread {
     public void reset(){
         regA = regB = regC = regD = 0;
         regMP = regPC = regSP = 0;
+        currentInstructionAddress = 0;
         flagCY = flagIE = flagZ = false;
 
         synchronized (this.RAM) {
@@ -410,6 +414,14 @@ public class CPU extends Thread {
      */
     public short getRegPC() {
         return regPC;
+    }
+
+    /**
+     * Vráti adresu práve vykonávanej (pri pozastavení nasledujúcej) inštrukcie, 0 až 65535.
+     * @return Adresa inštrukcie bez znamienka.
+     */
+    public int getCurrentInstructionAddress() {
+        return currentInstructionAddress;
     }
 
     /**
