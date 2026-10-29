@@ -152,6 +152,8 @@ public class SchematicSheet extends ScrollPane {
      * spájači majú vlastné handlery, tento príznak sa ich netýka.
      */
     private boolean backgroundBranchDrag;
+    /** Posledné stlačenie vybralo najbližší (zvýraznený) vodič - kliknutie na pozadí výber nezruší. */
+    private boolean pressSelectedNearestWire;
 
     private final EventHandler<MouseDragEvent> onMouseDragEnteredHandle = event -> {
         if (!isEditingEnabled()) return;
@@ -225,6 +227,9 @@ public class SchematicSheet extends ScrollPane {
         // POZOR: narozdiel od Board tu nevzniká žiadna počiatočná SchoolBreadboard - plocha je prázdna
 
         gridBackground.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
+            // stlačenie v okolí vodiča ho vybralo (zvýraznený vodič) - kliknutie, ktoré pristálo
+            // na pozadí vedľa vodiča, ten výber nesmie hneď zrušiť
+            if (pressSelectedNearestWire) return;
             if (event.getButton() == MouseButton.PRIMARY && !event.isShiftDown()) clearSelect();
         });
 
@@ -358,6 +363,7 @@ public class SchematicSheet extends ScrollPane {
             Node pressedNode = event.getPickResult() == null ? null : event.getPickResult().getIntersectedNode();
             panAllowed = isOnWireDropSurface(pressedNode);
             backgroundBranchDrag = false;
+            pressSelectedNearestWire = false;
 
             // klik (bez Shift/Ctrl, nie dvojklik) vyberie VŽDY vodič, ktorý je práve
             // zvýraznený (najbližší) - nie ten, na ktorého neviditeľnej ploche
@@ -369,6 +375,7 @@ public class SchematicSheet extends ScrollPane {
                 if (highlighted != null) {
                     clearSelect();
                     addSelect(highlighted);
+                    pressSelectedNearestWire = true;
                     panAllowed = false; // ťah z tohto miesta = odbočka, nie posun plochy
                     event.consume();
                 }
