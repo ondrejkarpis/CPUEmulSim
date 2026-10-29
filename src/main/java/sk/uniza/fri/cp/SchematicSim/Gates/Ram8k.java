@@ -16,9 +16,11 @@ import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Pin.InputPin;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
+import sk.uniza.fri.cp.SchematicSim.Sheet.SheetEvent;
 import sk.uniza.fri.cp.SchematicSim.Side;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -75,12 +77,28 @@ public class Ram8k extends GateSymbol {
     }
 
     /**
-     * Vytvorenie a naviazanie kontextového menu s položkou "Obsah" (zobrazenie obsahu pamäte).
+     * Vytvorenie a naviazanie kontextového menu s položkami "Obsah" (zobrazenie obsahu pamäte)
+     * a "Reset" (vymazanie celej pamäte).
      */
     private void buildContextMenu() {
         MenuItem contentItem = new MenuItem("Obsah");
         contentItem.setOnAction(event -> openContentWindow());
-        contextMenu.getItems().add(contentItem);
+        MenuItem resetItem = new MenuItem("Reset");
+        resetItem.setOnAction(event -> clearMemory());
+        contextMenu.getItems().addAll(contentItem, resetItem);
+    }
+
+    /**
+     * Vymazanie celej pamäte (všetky bajty na 0). Otvorené okno s obsahom sa obnoví samo.
+     * Pri bežiacej simulácii sa RAM prepočíta na simulačnom vlákne - pri práve prebiehajúcom
+     * čítaní tak hneď budí na dátové vývody vymazanú hodnotu.
+     */
+    private void clearMemory() {
+        Arrays.fill(memory, (byte) 0);
+        SchematicSheet sheet = getSheet();
+        if (sheet != null && sheet.isSimulationRunning()) {
+            sheet.addEvent(new SheetEvent(pinOE_));
+        }
     }
 
     /**
