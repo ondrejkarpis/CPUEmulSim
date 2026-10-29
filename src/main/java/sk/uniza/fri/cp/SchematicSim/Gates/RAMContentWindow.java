@@ -11,6 +11,7 @@ import javafx.scene.image.Image;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -41,6 +42,8 @@ public class RAMContentWindow {
     private static final String COLUMN_GAP = "   ";
     /** Šírka hex časti riadku v znakoch: adresa (4) + 16x (medzera + 2 číslice). */
     private static final int HEX_PART_WIDTH = 4 + ROW_BYTE_COUNT * 3;
+    /** Vnútorné odsadenie a okraj textovej oblasti + zvislý posúvač (px). */
+    private static final double WIDTH_EXTRA = 40;
 
     private final Stage stage;
     private final TextArea taContent;
@@ -80,7 +83,14 @@ public class RAMContentWindow {
         root.setPadding(new Insets(8));
         VBox.setVgrow(taContent, Priority.ALWAYS);
 
-        Scene scene = new Scene(root, 820, 540);
+        // úvodná šírka podľa dĺžky riadku obsahu (bez prázdneho miesta vpravo): riadok
+        // + okraje okna + vnútorné odsadenie textovej oblasti + zvislý posúvač
+        Text sampleRow = new Text(String.format("%0" + (HEX_PART_WIDTH + COLUMN_GAP.length()
+                + ROW_BYTE_COUNT * 2 - 1) + "d", 0));
+        sampleRow.setFont(CONTENT_FONT);
+        double width = Math.ceil(sampleRow.getLayoutBounds().getWidth()) + 2 * 8 + WIDTH_EXTRA;
+
+        Scene scene = new Scene(root, width, 540);
         this.stage.setScene(scene);
         this.stage.setMinWidth(520);
         this.stage.setMinHeight(300);
