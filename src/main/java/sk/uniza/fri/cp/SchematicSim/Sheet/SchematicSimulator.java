@@ -10,10 +10,12 @@ import javafx.scene.control.ButtonType;
 import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -34,6 +36,8 @@ public class SchematicSimulator {
     private static final int IDLE_POLL_TIMEOUT_MS = 5;
 
     private final LinkedBlockingQueue<SheetEvent> eventsQueue;
+    /** Posledná zaradená udalosť pre každý pin - staršie udalosti pinu vo fronte sa preskočia. */
+    private final ConcurrentHashMap<Pin, SheetEvent> latestEventForPin = new ConcurrentHashMap<>();
     private List<GateSymbol> allGates;
     private final BooleanProperty running;
 
@@ -141,7 +145,9 @@ if (steadyState) {
                                 // najprv prepíš siete z celej vlny (process), potom vyhodnoť
                                 // každé hradlo vlny RAZ - bez viacnásobného prepočtu v rámci vlny
                                 gatesToUpdate.clear();
-                                for (SheetEvent e : wave) e.process(gatesToUpdate);
+                                for (SheetEvent e : wave) {
+                                    if (!isSuperseded(e)) e.process(gatesToUpdate);
+                                }
                                 gatesToUpdate.forEach(GateSymbol::simulate);
                                 lastActivityTime = System.currentTimeMillis();
 
@@ -170,7 +176,9 @@ if (steadyState) {
 
                         // zostatok udalosti po rušení - vyhodnot, aby piny nezostali v nekonzistentnom stave
                         while (!eventsQueue.isEmpty()) {
-                            eventsQueue.take().process(gatesToUpdate);
+                            SheetEvent rest = eventsQueue.take();
+                            if (isSuperseded(rest)) continue;
+                            rest.process(gatesToUpdate);
                             gatesToUpdate.forEach(GateSymbol::simulate);
                             gatesToUpdate.clear();
                         }
@@ -219,8 +227,10 @@ if (steadyState) {
     }
 
     public void addEvent(SheetEvent event) {
-        // asynchrónne zapojenie - odstránenie eventu na pine, ktorý už nie je aktuálny
-        eventsQueue.removeIf(e -> e.getPin() != null && e.getPin().equals(event.getPin()));
+        // asynchrónne zapojenie - staršia udalosť na tom istom pine už nie je aktuálna. Namiesto
+        // removeIf nad celým frontom (O(n) a zamknutý front pri každej udalosti) sa iba zapamätá
+        // posledná udalosť pinu; staršie sa preskočia až pri spracovaní (isSuperseded)
+        if (event.getPin() != null) latestEventForPin.put(event.getPin(), event);
         // offer() namiesto put(): front je neohraničený, takže nikdy nečaká, a hlavne nie je
         // prerušiteľný - put() vo vlákne s nastaveným príznakom prerušenia (CPU zastavené počas
         // čakania na zbernicu) vyhodí InterruptedException a udalosť by sa potichu stratila
@@ -230,6 +240,16 @@ if (steadyState) {
         // simulácia mohla udalosť vybrať z frontu (front prázdny, idle ešte true) a CPU by
         // v tom okne považovalo zbernicu za ustálenú a prečítalo staré/náhodné dáta
         Bus.getBus().simulationProcessingStarts();
+    }
+
+    /**
+     * Zistí, či udalosť prekonala novšia udalosť na tom istom pine (vtedy sa nespracuje).
+     * Atomické remove(pin, event) - ak novšia udalosť príde až po spracovaní tejto, ostane
+     * v mape a spracuje sa tiež.
+     */
+    private boolean isSuperseded(SheetEvent event) {
+        Pin pin = event.getPin();
+        return pin != null && !latestEventForPin.remove(pin, event);
     }
 
     /**
