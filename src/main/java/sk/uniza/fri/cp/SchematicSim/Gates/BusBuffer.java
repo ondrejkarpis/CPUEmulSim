@@ -122,7 +122,7 @@ public class BusBuffer extends GateSymbol {
 
     @Override
     public String getName() {
-        return "Buffer";
+        return "BUF";
     }
 
     @Override
