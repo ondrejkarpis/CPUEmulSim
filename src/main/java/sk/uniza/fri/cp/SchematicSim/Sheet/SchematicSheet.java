@@ -185,9 +185,9 @@ public class SchematicSheet extends ScrollPane {
     private final EventHandler<MouseDragEvent> onMouseDragReleasedHandle = event -> {
         if (addingItem != null) {
             occupancy.occupy(addingItem);
-            if (addingItem instanceof sk.uniza.fri.cp.SchematicSim.Gates.Signal) {
+            if (addingItem instanceof sk.uniza.fri.cp.SchematicSim.Gates.Label) {
                 try {
-                    java.lang.reflect.Method m = sk.uniza.fri.cp.SchematicSim.Gates.Signal.class.getDeclaredMethod("assignAutoName");
+                    java.lang.reflect.Method m = sk.uniza.fri.cp.SchematicSim.Gates.Label.class.getDeclaredMethod("assignAutoName");
                     m.setAccessible(true);
                     m.invoke(addingItem);
                 } catch (Exception e) {

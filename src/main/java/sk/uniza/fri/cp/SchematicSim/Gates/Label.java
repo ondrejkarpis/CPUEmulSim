@@ -11,7 +11,6 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
@@ -44,7 +43,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Pomenovaný bod siete - signál. Signály s rovnakým menom sú elektricky prepojené
+ * Label - pomenovaný bod siete. Labely s rovnakým menom sú elektricky prepojené
  * tak, ako by boli prepojené skrytým vodičom: hodnota privedená na jeden z nich je
  * dostupná na všetkých ostatných s tým istým menom.
  * <p>
@@ -59,7 +58,7 @@ import java.util.Optional;
  *
  * @author Claude (návrh podľa SchematicSim architektúry)
  */
-public class Signal extends GateSymbol {
+public class Label extends GateSymbol {
 
     /** Minimálna šírka tela v mriežkových bunkách. */
     private static final int MIN_BODY_WIDTH = 3;
@@ -84,12 +83,12 @@ public class Signal extends GateSymbol {
     private ContextMenu contextMenu;
 
     /** Konštruktor pre paletku (ItemPicker). */
-    public Signal() {
+    public Label() {
         super();
     }
 
     /** Konštruktor pre umiestnenie na plochu - volaný reflexiou zo SchematicSheet. */
-    public Signal(SchematicSheet sheet) {
+    public Label(SchematicSheet sheet) {
         super(sheet);
         if (!getChildren().isEmpty()) {
             getChildren().remove(0);
@@ -110,7 +109,7 @@ public class Signal extends GateSymbol {
         Text text = new Text(getName());
         text.setLayoutY(text.getBoundsInLocal().getHeight());
 
-        Image image = new Image(getClass().getResourceAsStream("/icons/signal.png"));
+        Image image = new Image(getClass().getResourceAsStream("/icons/label.png"));
         ImageView view = new ImageView(image);
         view.setLayoutY(text.getBoundsInLocal().getHeight() + 5);
 
@@ -130,7 +129,7 @@ public class Signal extends GateSymbol {
 
     @Override
     protected Pane drawBody() {
-        // Placeholder - skutočné telo sa vytvorí v konštruktore Signal(SchematicSheet)
+        // Placeholder - skutočné telo sa vytvorí v konštruktore Label(SchematicSheet)
         return new Pane();
     }
 
@@ -400,8 +399,8 @@ public class Signal extends GateSymbol {
 
         ObservableList<String> existing = FXCollections.observableArrayList();
         for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            Signal other = (Signal) gate;
+            if (!(gate instanceof Label)) continue;
+            Label other = (Label) gate;
             if (other == this) continue;
             String name = other.getSignalName();
             if (name != null && !name.isEmpty() && !existing.contains(name)) {
@@ -410,11 +409,11 @@ public class Signal extends GateSymbol {
         }
 
         Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Názov signálu");
+        dialog.setTitle("Label signálu");
         dialog.setHeaderText(null);
         dialog.setResizable(false);
 
-        Label prompt = new Label("Meno signálu:");
+        javafx.scene.control.Label prompt = new javafx.scene.control.Label("Label:");
         ComboBox<String> comboBox = new ComboBox<>(existing);
         comboBox.setEditable(true);
         if (signalName != null) comboBox.setValue(signalName);
@@ -441,7 +440,7 @@ public class Signal extends GateSymbol {
     }
 
     /**
-     * Po položení signálu z paletky sa automaticky priradí jednoznačné meno Sxx.
+     * Po položení signálu z paletky sa automaticky priradí jednoznačné meno Lxx.
      */
     private void assignAutoName() {
         if (named || signalName != null && !signalName.isEmpty()) return;
@@ -449,9 +448,9 @@ public class Signal extends GateSymbol {
         if (sheet == null) return;
         boolean[] used = new boolean[100];
         for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            String name = ((Signal) gate).getSignalName();
-            if (name == null || name.length() != 3 || !name.startsWith("S")) continue;
+            if (!(gate instanceof Label)) continue;
+            String name = ((Label) gate).getSignalName();
+            if (name == null || name.length() != 3 || !name.startsWith("L")) continue;
             try {
                 int n = Integer.parseInt(name.substring(1));
                 if (n >= 0 && n < 100) used[n] = true;
@@ -460,12 +459,12 @@ public class Signal extends GateSymbol {
         }
         for (int i = 0; i < 100; i++) {
             if (!used[i]) {
-                applyLayout(String.format("S%02d", i), side);
+                applyLayout(String.format("L%02d", i), side);
                 named = true;
                 return;
             }
         }
-        applyLayout("S00", side);
+        applyLayout("L00", side);
         named = true;
     }
 
@@ -513,7 +512,7 @@ public class Signal extends GateSymbol {
     public void simulate() {
         if (signalName == null || signalName.isEmpty()) return;
 
-        List<Signal> group = groupMembers();
+        List<Label> group = groupMembers();
         Potential.Value value = groupValue(group);
 
         Pin.PinState state;
@@ -536,13 +535,13 @@ public class Signal extends GateSymbol {
     /**
      * Všetky signály na ploche s rovnakým menom - tvoria jednu elektrickú skupinu.
      */
-    private List<Signal> groupMembers() {
-        List<Signal> group = new ArrayList<>();
+    private List<Label> groupMembers() {
+        List<Label> group = new ArrayList<>();
         SchematicSheet sheet = getSheet();
         if (sheet == null || signalName == null) return group;
         for (GateSymbol gate : sheet.getGates()) {
-            if (!(gate instanceof Signal)) continue;
-            Signal other = (Signal) gate;
+            if (!(gate instanceof Label)) continue;
+            Label other = (Label) gate;
             if (signalName.equals(other.getSignalName())) group.add(other);
         }
         return group;
@@ -553,9 +552,9 @@ public class Signal extends GateSymbol {
      * budič (výstup hradla alebo odbočka zbernice); ak budič nie je, signály zostávajú
      * plávajúce. Pri dvoch rozporných budičoch je hodnota neurčitá.
      */
-    private static Potential.Value groupValue(List<Signal> group) {
+    private static Potential.Value groupValue(List<Label> group) {
         Potential.Value result = Potential.Value.NC;
-        for (Signal member : group) {
+        for (Label member : group) {
             if (!member.hasForeignDriver(group)) continue;
             Potential.Value value = member.netValue();
             if (value == Potential.Value.NC) continue;
@@ -572,7 +571,7 @@ public class Signal extends GateSymbol {
      * Je na sieti vývodu cudzí budič (výstup hradla, odbočka zbernice)? Vlastné
      * signály skupiny sa za budiče nepovažujú.
      */
-    private boolean hasForeignDriver(List<Signal> group) {
+    private boolean hasForeignDriver(List<Label> group) {
         Potential aggregate = lead.getPotential();
         if (aggregate == null) return false;
 
@@ -582,7 +581,7 @@ public class Signal extends GateSymbol {
             if (!(node instanceof Pin)) continue;
             Pin pin = (Pin) node;
             Object owner = pin.getOwner();
-            if (owner instanceof Signal && group.contains(owner)) continue;
+            if (owner instanceof Label && group.contains(owner)) continue;
             PinType type = pin.getOwnedPotential().getType();
             if (type == PinType.OUT || type == PinType.IO
                     || type == PinType.TRI_OUT || type == PinType.WEAK_OUT) {
@@ -645,11 +644,11 @@ public class Signal extends GateSymbol {
 
     @Override
     public String getName() {
-        return "SIG";
+        return "LAB";
     }
 
     @Override
     public String getShortDescription() {
-        return "Signál - pomenovaný bod siete; signály s rovnakým menom sú elektricky prepojené";
+        return "Label - pomenovaný bod siete; labely s rovnakým menom sú elektricky prepojené";
     }
 }

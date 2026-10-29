@@ -43,7 +43,6 @@ import sk.uniza.fri.cp.SchematicSim.Gates.SevenSegmentDisplay;
 import sk.uniza.fri.cp.SchematicSim.Gates.PushButton;
 import sk.uniza.fri.cp.SchematicSim.Gates.MatrixKeyboard;
 import sk.uniza.fri.cp.SchematicSim.Gates.Register8;
-import sk.uniza.fri.cp.SchematicSim.Gates.Signal;
 import sk.uniza.fri.cp.SchematicSim.Gates.Input;
 import sk.uniza.fri.cp.SchematicSim.ItemPicker;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchemeLoader;
@@ -180,7 +179,7 @@ public class SchematicController {
         picker.registerItem(new ControlBus());
 
         //pomenované signály (prepojenie signálov s rovnakým menom)
-        picker.registerItem(new Signal());
+        picker.registerItem(new sk.uniza.fri.cp.SchematicSim.Gates.Label()); // plné meno - javafx Label je importovaný
 
         //zariadenia komunikujúce so zbernicou CPU
         picker.registerItem(new Input());
