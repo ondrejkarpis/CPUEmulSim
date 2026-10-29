@@ -171,6 +171,9 @@ public class Signal extends GateSymbol {
         }
 
         Pane pane = new Pane(polygon, label);
+        // kliky iba na tele - neviditeľný obdĺžnik Pane (od 0,0) by pri tesnom umiestnení
+        // prekryl susednú súčiastku a zobral by jej klik
+        pane.setPickOnBounds(false);
         centerLabel();
         return pane;
     }
