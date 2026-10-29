@@ -104,6 +104,14 @@ public class RAMContentWindow {
     }
 
     /**
+     * Zatvorenie okna (napr. pri zmazaní súčiastky RAM) a zastavenie obnovovania obsahu.
+     */
+    public void close() {
+        refreshTimeline.stop();
+        stage.close();
+    }
+
+    /**
      * Naviaže okno na aktuálnu pamäť súčiastky, okamžite ju zobrazí a spustí
      * pravidelné obnovovanie obsahu.
      *

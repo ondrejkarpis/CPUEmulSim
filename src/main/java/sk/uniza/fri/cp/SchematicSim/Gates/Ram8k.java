@@ -120,6 +120,13 @@ public class Ram8k extends GateSymbol {
     }
 
     @Override
+    public void delete() {
+        // okno s obsahom zmazanej RAM by ďalej ukazovalo pamäť, ktorá už na ploche nie je
+        if (contentWindow != null) contentWindow.close();
+        super.delete();
+    }
+
+    @Override
     protected List<Pin> createPins() {
         List<Pin> pins = new ArrayList<>();
 
