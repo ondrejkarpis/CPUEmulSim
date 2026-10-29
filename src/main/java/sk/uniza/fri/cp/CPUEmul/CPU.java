@@ -767,7 +767,7 @@ public class CPU extends Thread {
             case STR:
                 Rd = getRegisterVal(instruction.getFirstParameter());
                 Rs = getRegisterVal(instruction.getSecondParameter());
-                synchronized (this) {
+                synchronized (this.RAM) { //rovnaky zamok ako getRAM() a reset()
                     RAM[Rd] = (byte) Rs;
                 }
                 break;
