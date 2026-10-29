@@ -20,9 +20,12 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import sk.uniza.fri.cp.Bus.Bus;
+import sk.uniza.fri.cp.SchematicSim.Connectable;
 import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
+import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Gates.Label;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -296,12 +299,67 @@ public class DataBus8 extends BusSymbol {
 
     private void driveTap(TapPoint tap) {
         if (write) {
-            boolean high = (data & (1 << tap.bit)) != 0;
-            setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
+            setPin(tap.pin, lineHigh(tap.bit) ? Pin.PinState.HIGH : Pin.PinState.LOW);
         } else {
             setPin(tap.pin, Pin.PinState.HIGH_IMPEDANCE);
         }
         scheduleTapVisuals();
+    }
+
+    /**
+     * Hodnota vedenia DB&lt;bit&gt; pri zápise CPU. Všetky symboly dátovej zbernice na ploche
+     * predstavujú JEDNU fyzickú zbernicu - odbočky s rovnakým bitom sú to isté vedenie, aj keď
+     * ich siete nie sú spojené vodičom. CPU dáva na vedenie slabú hodnotu; silný budič
+     * (výstup hradla, tri-state, IO) na ktorejkoľvek odbočke ju prepíše a slabú jednotku
+     * stiahne na 0 aj slabý budič (napr. stĺpec klávesnice). Bez toho by nula od klávesnice
+     * ostala iba na sieti jej symbolu a register na inom symbole by prečítal jednotku z CPU.
+     */
+    private boolean lineHigh(int bit) {
+        boolean strongLow = false;
+        boolean strongHigh = false;
+        boolean weakLow = false;
+        List<Connectable> nodes = new ArrayList<>();
+        for (DataBus8 bus : allDataBuses()) {
+            for (TapPoint tap : bus.taps) {
+                if (tap.bit != bit || !tap.pin.isConnected()) continue;
+                Potential aggregate = tap.pin.getPotential();
+                if (aggregate == null) continue;
+                nodes.clear();
+                aggregate.getConnectedNodes(nodes);
+                for (Connectable node : nodes) {
+                    // budiče zbernice samotnej sa nerátajú; Label zrkadlí hodnotu siete,
+                    // a keby sa rátal, slabá nula by sa cez neho zacyklila a ostala by navždy
+                    if (!(node instanceof Pin) || node instanceof TapPin) continue;
+                    Pin pin = (Pin) node;
+                    if (pin.getOwner() instanceof Label) continue;
+                    Potential.Value value = pin.getOwnedPotential().getValue();
+                    if (value == Potential.Value.NC) continue;
+                    PinType type = pin.getOwnedPotential().getType();
+                    if (type == PinType.OUT || type == PinType.IO || type == PinType.TRI_OUT) {
+                        if (value == Potential.Value.LOW) strongLow = true;
+                        else strongHigh = true;
+                    } else if (type == PinType.WEAK_OUT && value == Potential.Value.LOW) {
+                        weakLow = true;
+                    }
+                }
+            }
+        }
+        if (strongLow) return false;
+        if (strongHigh) return true;
+        return (data & (1 << bit)) != 0 && !weakLow;
+    }
+
+    /** Všetky symboly dátovej zbernice na ploche (vrátane tohto). */
+    private List<DataBus8> allDataBuses() {
+        List<DataBus8> buses = new ArrayList<>();
+        SchematicSheet sheet = getSheet();
+        if (sheet != null) {
+            for (GateSymbol gate : sheet.getGates()) {
+                if (gate instanceof DataBus8) buses.add((DataBus8) gate);
+            }
+        }
+        if (!buses.contains(this)) buses.add(this);
+        return buses;
     }
 
     private void scheduleTapVisuals() {
@@ -703,7 +761,7 @@ public class DataBus8 extends BusSymbol {
         if ((getBus().getControlBus() & 0xB0) != 0xB0) return;
         this.data = Byte.toUnsignedInt(getBus().getDataBus());
         for (TapPoint tap : taps) {
-            boolean high = (data & (1 << tap.bit)) != 0;
+            boolean high = write ? lineHigh(tap.bit) : (data & (1 << tap.bit)) != 0;
             setPin(tap.pin, high ? Pin.PinState.HIGH : Pin.PinState.LOW);
         }
         scheduleTapVisuals();
@@ -797,8 +855,13 @@ public class DataBus8 extends BusSymbol {
         if (read) {
             readPinsIntoBus();
         } else if (write) {
-            for (TapPoint tap : taps) {
-                driveTap(tap);
+            // zmena siete na jednej odbočke (napr. klávesnica stiahla bit na 0) mení vedenie
+            // celej zbernice - preto sa prebudia odbočky VŠETKÝCH symbolov dátovej zbernice
+            for (DataBus8 bus : allDataBuses()) {
+                if (!bus.write) continue;
+                for (TapPoint tap : bus.taps) {
+                    bus.driveTap(tap);
+                }
             }
         }
         // pri zmene siete (iná súčiastka pretiahla slabú hodnotu zbernice) sa simulate()
