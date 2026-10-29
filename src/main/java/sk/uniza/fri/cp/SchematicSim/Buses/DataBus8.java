@@ -25,7 +25,6 @@ import sk.uniza.fri.cp.SchematicSim.ContextMenuHelper;
 import sk.uniza.fri.cp.SchematicSim.Electrical.PinType;
 import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
-import sk.uniza.fri.cp.SchematicSim.Gates.Label;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 import sk.uniza.fri.cp.SchematicSim.Sheet.SchematicSheet;
 import sk.uniza.fri.cp.SchematicSim.Side;
@@ -327,11 +326,10 @@ public class DataBus8 extends BusSymbol {
                 nodes.clear();
                 aggregate.getConnectedNodes(nodes);
                 for (Connectable node : nodes) {
-                    // budiče zbernice samotnej sa nerátajú; Label zrkadlí hodnotu siete,
-                    // a keby sa rátal, slabá nula by sa cez neho zacyklila a ostala by navždy
+                    // budiče zbernice samotnej sa nerátajú (labely nič nebudia - ich siete
+                    // spájajú neviditeľné vodiče, takže budiče za labelmi sú priamo tu)
                     if (!(node instanceof Pin) || node instanceof TapPin) continue;
                     Pin pin = (Pin) node;
-                    if (pin.getOwner() instanceof Label) continue;
                     Potential.Value value = pin.getOwnedPotential().getValue();
                     if (value == Potential.Value.NC) continue;
                     PinType type = pin.getOwnedPotential().getType();

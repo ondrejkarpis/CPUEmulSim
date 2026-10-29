@@ -9,7 +9,9 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import sk.uniza.fri.cp.Bus.Bus;
 import sk.uniza.fri.cp.SchematicSim.Buses.BusSymbol;
+import sk.uniza.fri.cp.SchematicSim.Electrical.Potential;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.Gates.Label;
 import sk.uniza.fri.cp.SchematicSim.Pin.Pin;
 
 import java.util.ArrayList;
@@ -48,12 +50,19 @@ public class SchematicSimulator {
                 @Override
                 protected Void call() throws Exception {
                     Thread.currentThread().setName("SchematicSimulationThread");
+                    // neviditeľné vodiče medzi labelmi s rovnakým menom - iba počas tohto behu
+                    List<Potential> labelLinks = null;
 
                     // celý beh simulácie je v try/finally - pri akejkoľvek chybe alebo rušení
                     // sa musí vždy odpojiť od zbernice, inak by CPU navždy čakalo na ustálenie
                     // dát (isSimulationRunning by ostalo true a waitForSteadyState by sa zacyklilo)
                     try {
                         setRunningQuietly(true);
+
+                        // labely s rovnakým menom sa spoja neviditeľnými vodičmi ešte pred
+                        // počiatočným vyhodnotením (počas simulácie je editovanie zakázané,
+                        // takže sa siete do vypnutia nezmenia)
+                        labelLinks = Label.connectLabels(allGates);
 
                         // pripojenie zbernice k simulátoru - CPU dostane znamenie, že nás môže počúvať
                         // idle sa zneplatní PRED ohlásením behu - inak by CPU (čakajúce na štart
@@ -190,6 +199,15 @@ if (steadyState) {
                         t.printStackTrace(System.err);
                     } finally {
                         System.err.println("[Sim] Koniec simulácie (isCancelled=" + isCancelled() + ")");
+                        // odstránenie neviditeľných vodičov ešte PRED ohlásením konca behu -
+                        // nové zapnutie (čaká na running=false) ich tak nemôže prekryť
+                        if (labelLinks != null) {
+                            try {
+                                Label.disconnectLabels(labelLinks);
+                            } catch (RuntimeException e) {
+                                e.printStackTrace(System.err);
+                            }
+                        }
                         try {
                             setRunningQuietly(false);
                         } finally {
