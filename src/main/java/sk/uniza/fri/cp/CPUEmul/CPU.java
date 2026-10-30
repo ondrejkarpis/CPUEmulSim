@@ -1035,6 +1035,11 @@ public class CPU extends Thread {
         microstepAwait("Nastavenie adresy");
         bus.setAddressBus(addr);
 
+        //cakanie na ustalenie adresy pred aktivovanim priznaku - dekoder nesmie so starou
+        //adresou ani na chvilu povolit iny obvod na zbernicu
+        this.waitForSteadySimulation(inst, false);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
+
         microstepAwait("Nastavenie priznaku " + (inst == enumInstructionsSet.INN?"IOR":"MR") + " = 0");
 
         //nastavenie priznaku citania
@@ -1088,6 +1093,12 @@ public class CPU extends Thread {
         //nastavenie dat
         microstepAwait("Nastavenie dat");
         bus.setDataBus(data);
+
+        //cakanie na ustalenie adresy a dat pred aktivovanim priznaku (predstih) - inak by zmena
+        //adresy a priznak padli do jednej vlny simulacie a dekoder by este videl staru adresu
+        //(napr. NOT + NOR by na chvilu povolil aj iny register a zapisal don data)
+        this.waitForSteadySimulation(inst, false);
+        if (!isExecuting) throw new InterruptedException("CPU stopped");
 
         //nastavenie priznaku
         microstepAwait("Nastavenie priznaku " + (inst == enumInstructionsSet.OUT?"IOW":"MW") + " = 0");
