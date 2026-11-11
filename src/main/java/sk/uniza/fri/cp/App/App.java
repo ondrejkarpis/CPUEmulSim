@@ -9,6 +9,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.image.Image;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 import sk.uniza.fri.cp.App.CPUControl.CPUController;
@@ -105,6 +106,20 @@ public class App extends Application {
 
         mainScene.addEventFilter(KeyEvent.KEY_TYPED, onKeyTyped);
         mainScene.addEventFilter(KeyEvent.ANY, onKeyPressed);
+
+        //ALT+TAB: uvoľnenie ALT, ktorého stlačenie okno nevidelo (prepnutie sa do okna),
+        //by v menu zvýraznilo položku Súbor - takéto uvoľnenie ALT sa ignoruje
+        boolean[] altPressedHere = {false};
+        mainScene.addEventFilter(KeyEvent.KEY_PRESSED, ke -> {
+            if (ke.getCode() == KeyCode.ALT) altPressedHere[0] = true;
+        });
+        mainScene.addEventFilter(KeyEvent.KEY_RELEASED, ke -> {
+            if (ke.getCode() == KeyCode.ALT) {
+                if (!altPressedHere[0]) ke.consume();
+                altPressedHere[0] = false;
+            }
+        });
+        primaryStage.focusedProperty().addListener((obs, was, is) -> altPressedHere[0] = false);
 
         //pri kliknuti na tlacidlo zatvorenia okna
         primaryStage.setOnCloseRequest(event -> {

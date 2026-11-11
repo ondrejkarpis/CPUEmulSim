@@ -47,6 +47,30 @@
     -fx-background-color: #caffca !important;
 }
 
+/* Velkost pisma editora kodu (CPUController.applyEditorFontSize) */
+.code-area.fs-7 .text, .code-area.fs-7 .lineno { -fx-font-size: 7pt; }
+.code-area.fs-8 .text, .code-area.fs-8 .lineno { -fx-font-size: 8pt; }
+.code-area.fs-9 .text, .code-area.fs-9 .lineno { -fx-font-size: 9pt; }
+.code-area.fs-10 .text, .code-area.fs-10 .lineno { -fx-font-size: 10pt; }
+.code-area.fs-11 .text, .code-area.fs-11 .lineno { -fx-font-size: 11pt; }
+.code-area.fs-12 .text, .code-area.fs-12 .lineno { -fx-font-size: 12pt; }
+.code-area.fs-13 .text, .code-area.fs-13 .lineno { -fx-font-size: 13pt; }
+.code-area.fs-14 .text, .code-area.fs-14 .lineno { -fx-font-size: 14pt; }
+.code-area.fs-15 .text, .code-area.fs-15 .lineno { -fx-font-size: 15pt; }
+.code-area.fs-16 .text, .code-area.fs-16 .lineno { -fx-font-size: 16pt; }
+.code-area.fs-17 .text, .code-area.fs-17 .lineno { -fx-font-size: 17pt; }
+.code-area.fs-18 .text, .code-area.fs-18 .lineno { -fx-font-size: 18pt; }
+.code-area.fs-19 .text, .code-area.fs-19 .lineno { -fx-font-size: 19pt; }
+.code-area.fs-20 .text, .code-area.fs-20 .lineno { -fx-font-size: 20pt; }
+.code-area.fs-21 .text, .code-area.fs-21 .lineno { -fx-font-size: 21pt; }
+.code-area.fs-22 .text, .code-area.fs-22 .lineno { -fx-font-size: 22pt; }
+.code-area.fs-23 .text, .code-area.fs-23 .lineno { -fx-font-size: 23pt; }
+.code-area.fs-24 .text, .code-area.fs-24 .lineno { -fx-font-size: 24pt; }
+.code-area.fs-25 .text, .code-area.fs-25 .lineno { -fx-font-size: 25pt; }
+.code-area.fs-26 .text, .code-area.fs-26 .lineno { -fx-font-size: 26pt; }
+.code-area.fs-27 .text, .code-area.fs-27 .lineno { -fx-font-size: 27pt; }
+.code-area.fs-28 .text, .code-area.fs-28 .lineno { -fx-font-size: 28pt; }
+
 .paragraph-error{
     -fx-background-color: #ffb1ae;
 }

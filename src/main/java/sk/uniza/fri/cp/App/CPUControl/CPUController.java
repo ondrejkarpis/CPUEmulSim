@@ -271,6 +271,7 @@ public class CPUController implements Initializable {
 
 		//Inicializacia editora kodu
         codeEditor = CodeEditorFactory.getCodeEditor(codeAreaPane, observableBreakpointLines);
+        applyEditorFontSize();
         codeEditor.richChanges()
                 .filter(ch -> !ch.getInserted().getText().equals(ch.getRemoved().getText()))
                 .subscribe(change -> {
@@ -372,14 +373,14 @@ public class CPUController implements Initializable {
             btnStop.getScene().getAccelerators().put(new KeyCodeCombination(KeyCode.F9, KeyCombination.CONTROL_DOWN), ()->{
                 if (fontSize > 7) {
                     fontSize--;
-                    codeEditor.setStyle("-fx-font-size: " + fontSize +"pt;");
+                    applyEditorFontSize();
                 }
             });
             // zvecsenie pisma
             btnStop.getScene().getAccelerators().put(new KeyCodeCombination(KeyCode.F10, KeyCombination.CONTROL_DOWN), ()->{
                 if (fontSize < 28) {
                     fontSize++;
-                    codeEditor.setStyle("-fx-font-size: " + fontSize +"pt;");
+                    applyEditorFontSize();
                 }
             });
 
@@ -409,6 +410,16 @@ public class CPUController implements Initializable {
 
         // defaultne zapnutie updateovania GUI EZFix
         handleMenuSettingsAllowUpdateGUIAction();
+    }
+
+    /**
+     * Nastavenie veľkosti písma editora kódu cez CSS triedu "fs-N" (pravidlá v CPUEmul_style.css).
+     * Zdedený inline štýl -fx-font-size sa neuplatnil na prekreslené riadky (riadok s kurzorom,
+     * riadky obnovené cez undo) - mali predvolenú veľkosť písma.
+     */
+    private void applyEditorFontSize() {
+        codeEditor.getStyleClass().removeIf(c -> c.startsWith("fs-"));
+        codeEditor.getStyleClass().add("fs-" + fontSize);
     }
 
     /**
