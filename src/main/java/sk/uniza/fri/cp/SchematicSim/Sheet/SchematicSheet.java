@@ -19,6 +19,7 @@ import javafx.scene.Node;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -148,6 +149,8 @@ public class SchematicSheet extends ScrollPane {
     //vodiči, spájači či pine) - inak by pri začatí ťahu prvku plocha o kúsok ušla
     private boolean panAllowed = false;
     private final Group contentGroup;
+    /** panel, ktorého translateX/Y posúva plochu vo viewporte (pan, kotva zoomu) */
+    private final StackPane zoomPane;
 
     /** Vodič práve zvýraznený pri prechode kurzora (hover), null ak žiadny. */
     private Wire hoveredWire;
@@ -309,6 +312,7 @@ public class SchematicSheet extends ScrollPane {
         this.contentGroup = this.layersManager.getLayers();
         this.contentGroup.getTransforms().add(zoomScale);
         final StackPane zoomPane = new StackPane(contentGroup);
+        this.zoomPane = zoomPane;
         //TOP_LEFT - StackPane by default CENTROVAL obsah a centrovacia odchýlka sa so zmenou
         //stupnice menila (polovica zmeny rozmeru obsahu), čo pri vyššom priblížení posúvalo
         //schému doprava dole. Kotva obsahu je teraz pevne v (0,0) zoomPane.
@@ -1000,9 +1004,64 @@ public class SchematicSheet extends ScrollPane {
             MenuItem mergeCollinear = new MenuItem("Zlúčiť kolineárne vodiče");
             mergeCollinear.setOnAction(e -> mergeCollinearWires());
 
-            backgroundMenu.getItems().addAll(deleteUnused, mergeCollinear);
+            MenuItem center = new MenuItem("Centrovanie");
+            center.setOnAction(e -> centerView());
+
+            backgroundMenu.getItems().addAll(center, new SeparatorMenuItem(), deleteUnused, mergeCollinear);
         }
         ContextMenuHelper.show(backgroundMenu, gridBackground, screenX, screenY);
+    }
+
+    /** okraj (px obrazovky) okolo schémy pri centrovaní */
+    private static final double CENTER_MARGIN = 20;
+
+    /**
+     * Centrovanie: zoom a poloha plochy sa nastavia tak, aby boli všetky súčiastky a vodiče
+     * vo viewporte a čo najlepšie ho vyplnili (v rámci rozsahu zoomu kolieskom 0,3 - 3).
+     * Prázdna plocha sa vráti na zoom 1 a ľavý horný roh.
+     */
+    public void centerView() {
+        //obálka všetkých objektov v súradniciach plochy (vrstvy ležia v (0,0) bez transformácií)
+        double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY;
+        List<Node> nodes = new ArrayList<>(layersManager.getGates());
+        nodes.addAll(layersManager.getWires());
+        for (Node node : nodes) {
+            Bounds b = node.getBoundsInParent();
+            minX = Math.min(minX, b.getMinX());
+            minY = Math.min(minY, b.getMinY());
+            maxX = Math.max(maxX, b.getMaxX());
+            maxY = Math.max(maxY, b.getMaxY());
+        }
+
+        Bounds vp = this.localToScene(this.getViewportBounds());
+        double scale;
+        double cx, cy;
+        if (nodes.isEmpty()) {
+            scale = 1;
+            cx = vp.getWidth() / 2;
+            cy = vp.getHeight() / 2;
+        } else {
+            double w = Math.max(1, maxX - minX);
+            double h = Math.max(1, maxY - minY);
+            double availW = Math.max(1, vp.getWidth() - 2 * CENTER_MARGIN);
+            double availH = Math.max(1, vp.getHeight() - 2 * CENTER_MARGIN);
+            scale = Math.min(availW / w, availH / h);
+            scale = Math.max(0.3, Math.min(3, scale));
+            cx = (minX + maxX) / 2;
+            cy = (minY + maxY) / 2;
+        }
+
+        zoomScale.setX(scale);
+        zoomScale.setY(scale);
+        scaleTotal.setValue(scale);
+
+        //stred obálky sa presunie do stredu viewportu (merané priamo v scéne)
+        Point2D centerNow = contentGroup.localToScene(cx, cy);
+        zoomPane.setTranslateX(zoomPane.getTranslateX() + (vp.getMinX() + vp.getWidth() / 2 - centerNow.getX()));
+        zoomPane.setTranslateY(zoomPane.getTranslateY() + (vp.getMinY() + vp.getHeight() / 2 - centerNow.getY()));
+        //schéma pri okraji plochy - plocha sa nesmie odsunúť mimo viewport
+        enforceContentInView(zoomPane);
     }
 
     /**
