@@ -30,8 +30,10 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.transform.Scale;
 import javafx.util.Duration;
 import sk.uniza.fri.cp.SchematicSim.Gates.GateSymbol;
+import sk.uniza.fri.cp.SchematicSim.GridBackground;
 import sk.uniza.fri.cp.SchematicSim.GridOccupancy;
 import sk.uniza.fri.cp.SchematicSim.GridSystem;
 import sk.uniza.fri.cp.SchematicSim.Item;
@@ -75,7 +77,9 @@ public class SchematicSheet extends ScrollPane {
     private final double heightPx;
 
     /** Pozadie plochy (mriežka) - príjemca klikov a panningu na voľnej ploche. */
-    private final Pane gridBackground;
+    private final GridBackground gridBackground;
+    /** naplánované pregenerovanie čiar mriežky pre viditeľnú časť (zlučuje viac zmien do jednej) */
+    private boolean gridRefreshPending;
 
     private final SchematicSimulator simulator;
     private final GridSystem gridSystem;
@@ -138,6 +142,8 @@ public class SchematicSheet extends ScrollPane {
     /** Presnosť testu kolinearity pri presune spájača odbočky na kolmý náprotivok. */
     private static final double COLLINEAR_EPS = 0.5;
     private final SimpleDoubleProperty scaleTotal = new SimpleDoubleProperty(1);
+    /** zoom plochy - stupnica s pivotom v ľavom hornom rohu obsahu */
+    private final Scale zoomScale = new Scale(1, 1, 0, 0);
     //pan sa spustí len vtedy, ak stlačenie začalo na prázdnej ploche (nie na súčiastke,
     //vodiči, spájači či pine) - inak by pri začatí ťahu prvku plocha o kúsok ušla
     private boolean panAllowed = false;
@@ -220,7 +226,7 @@ public class SchematicSheet extends ScrollPane {
         this.gridSystem = new GridSystem(gridSizePx);
         this.occupancy = new GridOccupancy();
 
-        Pane gridBackground = gridSystem.generateBackground(this.widthPx, this.heightPx, Color.WHITE, Color.LIGHTGRAY);
+        GridBackground gridBackground = gridSystem.generateBackground(this.widthPx, this.heightPx, Color.WHITE, Color.LIGHTGRAY);
         this.gridBackground = gridBackground;
         this.layersManager = new SheetLayersManager(gridBackground);
 
@@ -301,6 +307,7 @@ public class SchematicSheet extends ScrollPane {
         this.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
 
         this.contentGroup = this.layersManager.getLayers();
+        this.contentGroup.getTransforms().add(zoomScale);
         final StackPane zoomPane = new StackPane(contentGroup);
         //TOP_LEFT - StackPane by default CENTROVAL obsah a centrovacia odchýlka sa so zmenou
         //stupnice menila (polovica zmeny rozmeru obsahu), čo pri vyššom priblížení posúvalo
@@ -314,7 +321,10 @@ public class SchematicSheet extends ScrollPane {
             scrollContent.setPrefSize(newV.getWidth(), newV.getHeight());
             scrollContent.setMaxSize(newV.getWidth(), newV.getHeight());
             zoomPane.setMinSize(newV.getWidth(), newV.getHeight());
+            scheduleGridRefresh();
         });
+        //mriežka sa kreslí iba okolo viditeľnej časti - pri posune/zoome sa podľa potreby doplní
+        gridBackground.localToSceneTransformProperty().addListener((obs, oldV, newV) -> scheduleGridRefresh());
 
         zoomPane.setOnScroll(event -> {
             event.consume();
@@ -329,28 +339,22 @@ public class SchematicSheet extends ScrollPane {
             double mouseSceneY = event.getSceneY();
             Point2D anchor = contentGroup.sceneToLocal(mouseSceneX, mouseSceneY);
 
-            contentGroup.setScaleX(newScale);
-            contentGroup.setScaleY(newScale);
+            //stupnica s pivotom v (0,0) obsahu (setScaleX/Y by škálovalo okolo STREDU plochy -
+            //pri veľkej ploche obrovský posun) a korekcia kotvy hneď, synchrónne: transformácie
+            //sa prepočítajú okamžite a layout sa zoomom nemení. Pôvodná oneskorená korekcia
+            //(runLater) pri rýchlom sledu scroll udalostí merala ďalšiu kotvu z ešte neopraveného
+            //stavu a schéma odskočila ďaleko od kurzora.
+            zoomScale.setX(newScale);
+            zoomScale.setY(newScale);
             scaleTotal.setValue(newScale);
 
-            //posun oneskorene (až po najbližšom layout cykle, keď majú scénové transformácie
-            //aktuálne rozmery). Kotva sa meria priamo zo scénovej polohy bodu mriežky
-            //(contentGroup.localToScene) a presunie sa cez zoomPane.translateX/Y: meraný posun je
-            //z definície presný, skin ho nikdy neprepisuje a nezávisí od rozsahu scrollbaru ani
-            //od žiadneho centrovania - bod pod kurzorom zostáva fixný pri VŠETKÝCH úrovniach.
-            Platform.runLater(() -> {
-                scrollContent.applyCss();
-                scrollContent.layout();
-
-                Point2D anchorNow = contentGroup.localToScene(anchor);
-                //kotva sa presunie o nameranú odchýlku (merané priamo v scéne - presné,
-                //nezávislé od rozsahu scrollbaru ani od centrovania skinu)
-                zoomPane.setTranslateX(zoomPane.getTranslateX() + (mouseSceneX - anchorNow.getX()));
-                zoomPane.setTranslateY(zoomPane.getTranslateY() + (mouseSceneY - anchorNow.getY()));
-                //po korekcii sa obsah vráti späť do viewportu (pri najmenších priblíženiach by
-                //holá korekcia inak posunula plochu mimo - sivé pásy alebo celé zmiznutie)
-                enforceContentInView(zoomPane);
-            });
+            //bod pod kurzorom sa vráti pod kurzor (merané priamo v scéne)
+            Point2D anchorNow = contentGroup.localToScene(anchor);
+            zoomPane.setTranslateX(zoomPane.getTranslateX() + (mouseSceneX - anchorNow.getX()));
+            zoomPane.setTranslateY(zoomPane.getTranslateY() + (mouseSceneY - anchorNow.getY()));
+            //po korekcii sa obsah vráti späť do viewportu (pri najmenších priblíženiach by
+            //holá korekcia inak posunula plochu mimo - sivé pásy alebo celé zmiznutie)
+            enforceContentInView(zoomPane);
         });
 
         final javafx.beans.property.ObjectProperty<Point2D> lastMouseCoordinates = new javafx.beans.property.SimpleObjectProperty<>();
@@ -897,6 +901,18 @@ public class SchematicSheet extends ScrollPane {
      * nič sa nemení - kotva pod kurzorom tak zostáva exaktná a na okrajoch (najmä pri
      * najmenších priblíženiach) sa plocha nevymkne mimo.
      */
+    private void scheduleGridRefresh() {
+        if (gridRefreshPending) return;
+        gridRefreshPending = true;
+        Platform.runLater(() -> {
+            gridRefreshPending = false;
+            Bounds vp = getViewportBounds();
+            if (vp == null || vp.getWidth() <= 0 || vp.getHeight() <= 0) return;
+            Bounds visible = gridBackground.sceneToLocal(localToScene(vp));
+            if (visible != null) gridBackground.showArea(visible);
+        });
+    }
+
     private void enforceContentInView(StackPane zoomPane) {
         double cw = contentGroup.getLayoutBounds().getWidth() * scaleTotal.doubleValue();
         double ch = contentGroup.getLayoutBounds().getHeight() * scaleTotal.doubleValue();

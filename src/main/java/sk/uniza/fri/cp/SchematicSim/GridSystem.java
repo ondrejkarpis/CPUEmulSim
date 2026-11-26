@@ -1,10 +1,7 @@
 package sk.uniza.fri.cp.SchematicSim;
 
 import javafx.geometry.Point2D;
-import javafx.scene.layout.Pane;
 import javafx.scene.paint.Paint;
-import javafx.scene.shape.Line;
-import javafx.scene.shape.Rectangle;
 
 /**
  * Mriežková súradnicová sústava plochy schémy. Prevzaté bezo zmeny z BreadboardSim.GridSystem -
@@ -51,24 +48,11 @@ public class GridSystem {
         return new Point2D(x / sizeX, y / sizeY);
     }
 
-    public Pane generateBackground(double width, double height, Paint bgColor, Paint linesColor) {
-        Pane bck = new Pane(new Rectangle(width, height, bgColor));
-
-        for (int x = 0; x <= width; x += sizeX) {
-            bck.getChildren().add(generateGridLine(x, 0, x, height, linesColor));
-        }
-        for (int y = 0; y <= height; y += sizeY) {
-            bck.getChildren().add(generateGridLine(0, y, width, y, linesColor));
-        }
-
-        return bck;
-    }
-
-    private Line generateGridLine(double startX, double startY, double endX, double endY, Paint lineColor) {
-        Line line = new Line(startX, startY, endX, endY);
-        line.setStroke(lineColor);
-        line.setOpacity(0.5);
-        line.setStrokeWidth(1);
-        return line;
+    /**
+     * Pozadie plochy s mriežkou. Čiary mriežky sa kreslia iba okolo viditeľnej časti -
+     * volajúci ju hlási cez {@link GridBackground#showArea}.
+     */
+    public GridBackground generateBackground(double width, double height, Paint bgColor, Paint linesColor) {
+        return new GridBackground(width, height, sizeX, sizeY, bgColor, linesColor);
     }
 }
